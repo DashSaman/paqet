@@ -4,9 +4,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
-	"paqet/internal/conf"
-	"paqet/internal/pkg/hash"
-	"paqet/internal/pkg/iterator"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -15,6 +12,10 @@ import (
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
 	"github.com/gopacket/gopacket/pcap"
+
+	"paqet/internal/conf"
+	"paqet/internal/pkg/hash"
+	"paqet/internal/pkg/iterator"
 )
 
 type TCPF struct {
@@ -216,9 +217,22 @@ func (h *SendHandle) getClientTCPF(dstIP net.IP, dstPort uint16) conf.TCPF {
 }
 
 func (h *SendHandle) setClientTCPF(addr net.Addr, f []conf.TCPF) {
-	a := *addr.(*net.UDPAddr)
+	a, ok := addr.(*net.UDPAddr)
+	if !ok {
+		return
+	}
 	h.tcpF.mu.Lock()
 	h.tcpF.clientTCPF[hash.IPAddr(a.IP, uint16(a.Port))] = &iterator.Iterator[conf.TCPF]{Items: f}
+	h.tcpF.mu.Unlock()
+}
+
+func (h *SendHandle) deleteClientTCPF(addr net.Addr) {
+	a, ok := addr.(*net.UDPAddr)
+	if !ok {
+		return
+	}
+	h.tcpF.mu.Lock()
+	delete(h.tcpF.clientTCPF, hash.IPAddr(a.IP, uint16(a.Port)))
 	h.tcpF.mu.Unlock()
 }
 

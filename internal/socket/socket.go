@@ -6,9 +6,10 @@ import (
 	"math/rand"
 	"net"
 	"os"
-	"paqet/internal/conf"
 	"sync/atomic"
 	"time"
+
+	"paqet/internal/conf"
 )
 
 type PacketConn struct {
@@ -150,4 +151,8 @@ func (c *PacketConn) SetDSCP(dscp int) error {
 
 func (c *PacketConn) SetClientTCPF(addr net.Addr, f []conf.TCPF) {
 	c.sendHandle.setClientTCPF(addr, f)
+}
+
+func (c *PacketConn) DeleteClientTCPF(addr net.Addr) {
+	c.sendHandle.deleteClientTCPF(addr)
 }
