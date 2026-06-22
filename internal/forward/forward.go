@@ -43,11 +43,12 @@ func (f *Forward) startTCP(ctx context.Context) error {
 		return err
 	}
 
+	go f.serveTCP(ctx, listener)
 	go func() {
-		f.serveTCP(ctx, listener)
 		<-ctx.Done()
 		listener.Close()
 	}()
+
 	return nil
 }
 
@@ -63,10 +64,11 @@ func (f *Forward) startUDP(ctx context.Context) error {
 		return err
 	}
 
+	go f.serveUDP(ctx, conn)
 	go func() {
-		f.serveUDP(ctx, conn)
 		<-ctx.Done()
 		conn.Close()
 	}()
+
 	return nil
 }
