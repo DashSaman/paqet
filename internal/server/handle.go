@@ -10,12 +10,6 @@ import (
 
 func (s *Server) handleConn(ctx context.Context, conn tnet.Conn) {
 	for {
-		select {
-		case <-ctx.Done():
-			flog.Debugf("stopping smux session for %s due to context cancellation", conn.RemoteAddr())
-			return
-		default:
-		}
 		strm, err := conn.AcceptStrm()
 		if err != nil {
 			flog.Errorf("failed to accept stream on %s: %v", conn.RemoteAddr(), err)

@@ -39,15 +39,14 @@ func (s *Server) Start(ctx context.Context) error {
 
 func (s *Server) listen(ctx context.Context, listener tnet.Listener) {
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
 		conn, err := listener.Accept()
 		if err != nil {
-			flog.Errorf("failed to accept connection: %v", err)
-			continue
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				continue
+			}
 		}
 		flog.Infof("accepted new connection from %s (local: %s)", conn.RemoteAddr(), conn.LocalAddr())
 
