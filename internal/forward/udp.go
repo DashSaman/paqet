@@ -3,6 +3,7 @@ package forward
 import (
 	"context"
 	"net"
+	"net/netip"
 	"time"
 
 	"paqet/internal/flog"
@@ -13,68 +14,62 @@ import (
 func (f *Forward) serveUDP(ctx context.Context, conn *net.UDPConn) {
 	flog.Infof("UDP forwarder listening on %s -> %s", f.listenAddr, f.targetAddr)
 
+	buf := make([]byte, buffer.UPool)
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
+		n, cAddr, err := conn.ReadFromUDPAddrPort(buf)
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				continue
+			}
 		}
 
-		f.handleUDPPacket(ctx, conn)
+		f.handleUDPConn(ctx, conn, cAddr, buf[:n])
 	}
 }
 
-func (f *Forward) handleUDPPacket(ctx context.Context, conn *net.UDPConn) {
-	buf := make([]byte, buffer.UPool)
-
-	n, caddr, err := conn.ReadFromUDP(buf)
+func (f *Forward) handleUDPConn(ctx context.Context, conn *net.UDPConn, cAddr netip.AddrPort, buf []byte) {
+	strm, new, k, err := f.client.UDP(cAddr.String(), f.targetAddr)
 	if err != nil {
-		return
-	}
-	if n == 0 {
-		return
-	}
-
-	strm, new, k, err := f.client.UDP(caddr.String(), f.targetAddr)
-	if err != nil {
-		flog.Errorf("failed to establish UDP stream for %s -> %s: %v", caddr, f.targetAddr, err)
+		flog.Errorf("failed to establish UDP stream for %s -> %s: %v", cAddr, f.targetAddr, err)
 		f.client.CloseUDP(k)
 		return
 	}
 
-	if _, err := strm.Write(buf[:n]); err != nil {
-		flog.Errorf("failed to forward %d bytes from %s -> %s: %v", n, caddr, f.targetAddr, err)
+	if _, err := strm.Write(buf); err != nil {
+		flog.Errorf("failed to forward bytes from %s -> %s: %v", cAddr, f.targetAddr, err)
 		f.client.CloseUDP(k)
 		return
 	}
 	if new {
-		flog.Infof("accepted UDP connection %d for %s -> %s", strm.SID(), caddr, f.targetAddr)
+		flog.Infof("accepted UDP connection %d for %s -> %s", strm.SID(), cAddr, f.targetAddr)
 		go func() {
 			defer f.client.CloseUDP(k)
-			f.handleUDPStrm(ctx, strm, conn, caddr)
+			f.handleUDPStrm(ctx, strm, conn, cAddr)
 		}()
 	}
 }
 
-func (f *Forward) handleUDPStrm(ctx context.Context, strm tnet.Strm, conn *net.UDPConn, caddr *net.UDPAddr) {
-	buf := make([]byte, buffer.UPool)
+func (f *Forward) handleUDPStrm(ctx context.Context, strm tnet.Strm, conn *net.UDPConn, cAddr netip.AddrPort) {
+	go func() {
+		<-ctx.Done()
+		strm.Close()
+	}()
 
+	buf := make([]byte, buffer.UPool)
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
 		strm.SetDeadline(time.Now().Add(8 * time.Second))
 		n, err := strm.Read(buf)
 		strm.SetDeadline(time.Time{})
 		if err != nil {
-			flog.Errorf("UDP stream %d read failed for %s -> %s: %v", strm.SID(), caddr, f.targetAddr, err)
+			flog.Errorf("UDP stream %d read failed for %s -> %s: %v", strm.SID(), cAddr, f.targetAddr, err)
 			return
 		}
-		_, err = conn.WriteToUDP(buf[:n], caddr)
+		_, err = conn.WriteToUDPAddrPort(buf[:n], cAddr)
 		if err != nil {
-			flog.Errorf("UDP stream %d write failed for %s -> %s: %v", strm.SID(), caddr, f.targetAddr, err)
+			flog.Errorf("UDP stream %d write failed for %s -> %s: %v", strm.SID(), cAddr, f.targetAddr, err)
 			return
 		}
 	}

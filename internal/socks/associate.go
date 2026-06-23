@@ -8,21 +8,22 @@ import (
 
 	"paqet/internal/flog"
 	"paqet/internal/pkg/buffer"
+	"paqet/internal/tnet"
 )
 
 type associate struct {
-	conn *net.UDPConn
-	peer *net.UDPAddr
+	conn  *net.UDPConn
+	cAddr *net.UDPAddr
 }
 
-func (a *associate) accept(src *net.UDPAddr) bool {
-	if !src.IP.Equal(a.peer.IP) {
+func (a *associate) accept(cAddr *net.UDPAddr) bool {
+	if !cAddr.IP.Equal(a.cAddr.IP) {
 		return false
 	}
-	if a.peer.Port == 0 {
-		a.peer.Port = src.Port
+	if a.cAddr.Port == 0 {
+		a.cAddr.Port = cAddr.Port
 	}
-	return src.Port == a.peer.Port
+	return cAddr.Port == a.cAddr.Port
 }
 
 func (s *Server) handleAssociate(ctx context.Context, tConn net.Conn, req *request) {
@@ -43,14 +44,14 @@ func (s *Server) handleAssociate(ctx context.Context, tConn net.Conn, req *reque
 		return
 	}
 
-	a := &associate{conn: conn, peer: &net.UDPAddr{}}
+	a := &associate{conn: conn, cAddr: &net.UDPAddr{}}
 	if req.atyp == atypDomain || net.IP(req.addr).IsUnspecified() {
-		a.peer.IP = tConn.RemoteAddr().(*net.TCPAddr).IP
+		a.cAddr.IP = tConn.RemoteAddr().(*net.TCPAddr).IP
 	} else {
-		a.peer.IP = net.IP(req.addr)
-		a.peer.Port = int(req.port[0])<<8 | int(req.port[1])
+		a.cAddr.IP = net.IP(req.addr)
+		a.cAddr.Port = int(req.port[0])<<8 | int(req.port[1])
 	}
-	flog.Debugf("SOCKS5 UDP_ASSOCIATE from %s relay=%s expect=%s", tConn.RemoteAddr(), bAddr, a.peer.IP)
+	flog.Debugf("SOCKS5 UDP_ASSOCIATE from %s relay=%s expect=%s", tConn.RemoteAddr(), bAddr, a.cAddr.IP)
 
 	go func() {
 		io.Copy(io.Discard, tConn)
@@ -62,34 +63,35 @@ func (s *Server) handleAssociate(ctx context.Context, tConn net.Conn, req *reque
 		tConn.Close()
 	}()
 
-	s.handleUDPPacket(ctx, a)
+	s.serveUDP(ctx, a)
 	flog.Debugf("SOCKS5 UDP_ASSOCIATE control connection %s closed", tConn.RemoteAddr())
 }
 
-func (s *Server) handleUDPPacket(ctx context.Context, a *associate) {
-	buf := make([]byte, 64*1024)
+func (s *Server) serveUDP(ctx context.Context, a *associate) {
+	buf := make([]byte, buffer.UPool)
 	for {
-		n, src, err := a.conn.ReadFromUDP(buf)
+		n, cAddr, err := a.conn.ReadFromUDP(buf)
 		if err != nil {
 			return
 		}
-		if !a.accept(src) {
-			flog.Debugf("SOCKS5 dropping UDP from unexpected source %s (want %s)", src, a.peer.IP)
+		if !a.accept(cAddr) {
+			flog.Debugf("SOCKS5 dropping UDP from unexpected source %s (want %s)", cAddr, a.cAddr.IP)
 			continue
 		}
 		d, err := decodeDatagram(buf[:n])
 		if err != nil {
-			flog.Debugf("SOCKS5 dropping malformed UDP datagram from %s: %v", src, err)
+			flog.Debugf("SOCKS5 dropping malformed UDP datagram from %s: %v", cAddr, err)
 			continue
 		}
-		s.handleUDPStrm(ctx, a, d)
+		s.handleUDPConn(ctx, a, d)
 	}
 }
 
-func (s *Server) handleUDPStrm(ctx context.Context, a *associate, d *datagram) {
-	strm, isNew, key, err := s.client.UDP(a.peer.String(), d.address())
+func (s *Server) handleUDPConn(ctx context.Context, a *associate, d *datagram) {
+	strm, new, k, err := s.client.UDP(a.cAddr.String(), d.address())
 	if err != nil {
-		flog.Errorf("SOCKS5 failed to establish UDP stream for %s -> %s: %v", a.peer, d.address(), err)
+		flog.Errorf("SOCKS5 failed to establish UDP stream for %s -> %s: %v", a.cAddr, d.address(), err)
+		s.client.CloseUDP(k)
 		return
 	}
 
@@ -97,38 +99,39 @@ func (s *Server) handleUDPStrm(ctx context.Context, a *associate, d *datagram) {
 	_, err = strm.Write(d.data)
 	strm.SetWriteDeadline(time.Time{})
 	if err != nil {
-		flog.Errorf("SOCKS5 failed to forward %d bytes from %s -> %s: %v", len(d.data), a.peer, d.address(), err)
-		s.client.CloseUDP(key)
-		return
-	}
-	if !isNew {
+		flog.Errorf("SOCKS5 failed to forward bytes from %s -> %s: %v", a.cAddr, d.address(), err)
+		s.client.CloseUDP(k)
 		return
 	}
 
-	flog.Infof("SOCKS5 accepted UDP connection %s -> %s", a.peer, d.address())
-
-	respAtyp := d.atyp
-	respAddr := append([]byte(nil), d.addr...)
-	respPort := append([]byte(nil), d.port...)
-	go func() {
-		defer s.client.CloseUDP(key)
+	if new {
+		flog.Infof("SOCKS5 accepted UDP connection %s -> %s", a.cAddr, d.address())
+		hdr := (&datagram{atyp: d.atyp, addr: d.addr, port: d.port}).bytes()
 		go func() {
-			<-ctx.Done()
-			strm.Close()
+			defer s.client.CloseUDP(k)
+			s.handleUDPStrm(ctx, strm, a, hdr)
 		}()
-		buf := make([]byte, buffer.UPool)
-		for {
-			strm.SetReadDeadline(time.Now().Add(8 * time.Second))
-			n, err := strm.Read(buf)
-			strm.SetReadDeadline(time.Time{})
-			if err != nil {
-				flog.Debugf("SOCKS5 UDP stream %d read error for %s: %v", strm.SID(), a.peer, err)
-				return
-			}
-			resp := (&datagram{atyp: respAtyp, addr: respAddr, port: respPort, data: buf[:n]}).bytes()
-			if _, err := a.conn.WriteToUDP(resp, a.peer); err != nil {
-				return
-			}
-		}
+	}
+}
+
+func (s *Server) handleUDPStrm(ctx context.Context, strm tnet.Strm, a *associate, hdr []byte) {
+	go func() {
+		<-ctx.Done()
+		strm.Close()
 	}()
+
+	buf := make([]byte, buffer.UPool)
+	hlen := copy(buf, hdr)
+	for {
+		strm.SetReadDeadline(time.Now().Add(8 * time.Second))
+		n, err := strm.Read(buf[hlen:])
+		strm.SetReadDeadline(time.Time{})
+		if err != nil {
+			flog.Debugf("SOCKS5 UDP stream %d read error for %s: %v", strm.SID(), a.cAddr, err)
+			return
+		}
+		if _, err := a.conn.WriteToUDP(buf[:hlen+n], a.cAddr); err != nil {
+			return
+		}
+	}
 }

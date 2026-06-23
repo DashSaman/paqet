@@ -18,7 +18,6 @@ func (f *Forward) serveTCP(ctx context.Context, listener net.Listener) {
 			case <-ctx.Done():
 				return
 			default:
-				flog.Errorf("failed to accept TCP connection on %s: %v", f.listenAddr, err)
 				continue
 			}
 		}

@@ -30,25 +30,31 @@ func (s *Server) Start(ctx context.Context, cfg conf.SOCKS5) error {
 	}
 	flog.Infof("SOCKS5 server listening on %s", cfg.Listen.String())
 
-	go func() {
-		for {
-			conn, err := listener.Accept()
-			if err != nil {
-				return
-			}
-			go func() {
-				defer conn.Close()
-				s.handleTCPConn(ctx, conn)
-			}()
-		}
-	}()
-
+	go s.serveTCP(ctx, listener)
 	go func() {
 		<-ctx.Done()
 		listener.Close()
 	}()
 
 	return nil
+}
+
+func (s *Server) serveTCP(ctx context.Context, listener net.Listener) {
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				continue
+			}
+		}
+		go func() {
+			defer conn.Close()
+			s.handleTCPConn(ctx, conn)
+		}()
+	}
 }
 
 func (s *Server) handleTCPConn(ctx context.Context, conn net.Conn) {
