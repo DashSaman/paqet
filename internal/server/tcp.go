@@ -26,7 +26,6 @@ func (s *Server) handleTCP(ctx context.Context, strm tnet.Strm, addr string) {
 		conn.Close()
 		flog.Debugf("closed TCP connection %s for stream %d", addr, strm.SID())
 	}()
-	flog.Debugf("TCP connection established to %s for stream %d", addr, strm.SID())
 
 	errChan := make(chan error, 2)
 	go func() { errChan <- buffer.CopyT(conn, strm) }()
@@ -35,7 +34,7 @@ func (s *Server) handleTCP(ctx context.Context, strm tnet.Strm, addr string) {
 	select {
 	case err := <-errChan:
 		if err != nil {
-			flog.Errorf("TCP stream %d to %s failed: %v", strm.SID(), addr, err)
+			flog.Errorf("TCP stream %d failed for %s -> %s: %v", strm.SID(), conn.RemoteAddr(), addr, err)
 		}
 	case <-ctx.Done():
 	}

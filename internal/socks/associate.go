@@ -99,7 +99,6 @@ func (s *Server) handleUDPConn(ctx context.Context, a *associate, d *datagram) {
 	_, err = strm.Write(d.data)
 	strm.SetWriteDeadline(time.Time{})
 	if err != nil {
-		flog.Errorf("SOCKS5 failed to forward bytes from %s -> %s: %v", a.cAddr, d.address(), err)
 		s.client.CloseUDP(k)
 		return
 	}
@@ -127,7 +126,6 @@ func (s *Server) handleUDPStrm(ctx context.Context, strm tnet.Strm, a *associate
 		n, err := strm.Read(buf[hlen:])
 		strm.SetReadDeadline(time.Time{})
 		if err != nil {
-			flog.Debugf("SOCKS5 UDP stream %d read error for %s: %v", strm.SID(), a.cAddr, err)
 			return
 		}
 		if _, err := a.conn.WriteToUDP(buf[:hlen+n], a.cAddr); err != nil {

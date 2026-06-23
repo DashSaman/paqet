@@ -23,7 +23,7 @@ func (c *Client) TCP(addr string) (tnet.Strm, error) {
 	p := protocol.Proto{Type: protocol.PTCP, Addr: tAddr}
 	err = p.Write(strm)
 	if err != nil {
-		flog.Debugf("failed to write TCP protocol header for %s on stream %d: %v", addr, strm.SID(), err)
+		flog.Debugf("failed to write TCP protocol for %s on stream %d: %v", addr, strm.SID(), err)
 		strm.Close()
 		return nil, err
 	}

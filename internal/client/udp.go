@@ -32,7 +32,7 @@ func (c *Client) UDP(lAddr, tAddr string) (tnet.Strm, bool, uint64, error) {
 	p := protocol.Proto{Type: protocol.PUDP, Addr: taddr}
 	err = p.Write(strm)
 	if err != nil {
-		flog.Debugf("failed to write UDP protocol header for %s -> %s on stream %d: %v", lAddr, tAddr, strm.SID(), err)
+		flog.Debugf("failed to write UDP protocol for %s -> %s on stream %d: %v", lAddr, tAddr, strm.SID(), err)
 		strm.Close()
 		return nil, false, 0, err
 	}

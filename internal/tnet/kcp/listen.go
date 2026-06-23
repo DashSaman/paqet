@@ -2,6 +2,7 @@ package kcp
 
 import (
 	"context"
+	"fmt"
 	"net"
 
 	"github.com/xtaci/kcp-go/v5"
@@ -22,13 +23,13 @@ func Listen(ctx context.Context, cfg *conf.KCP, netCfg conf.Network) (tnet.Liste
 	nCfg := netCfg
 	packetConn, err := socket.New(ctx, &nCfg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("kcp: failed to create packetconn: %w", err)
 	}
 
 	l, err := kcp.ServeConn(cfg.Block, cfg.Dshard, cfg.Pshard, packetConn)
 	if err != nil {
 		packetConn.Close()
-		return nil, err
+		return nil, fmt.Errorf("kcp: failed to serve connection: %w", err)
 	}
 
 	return &Listener{PacketConn: packetConn, cfg: cfg, listener: l}, nil
@@ -37,13 +38,13 @@ func Listen(ctx context.Context, cfg *conf.KCP, netCfg conf.Network) (tnet.Liste
 func (l *Listener) Accept() (tnet.Conn, error) {
 	conn, err := l.listener.AcceptKCP()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("kcp: failed to accept connection: %w", err)
 	}
 	aplConf(conn, l.cfg)
 	sess, err := smux.Server(conn, smuxConf(l.cfg))
 	if err != nil {
 		conn.Close()
-		return nil, err
+		return nil, fmt.Errorf("kcp: failed to create smux session: %w", err)
 	}
 	return &Conn{nil, conn, sess}, nil
 }

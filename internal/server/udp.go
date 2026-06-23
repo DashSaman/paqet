@@ -27,7 +27,6 @@ func (s *Server) handleUDP(ctx context.Context, strm tnet.Strm, addr string) {
 		conn.Close()
 		flog.Debugf("closed UDP connection %s for stream %d", addr, strm.SID())
 	}()
-	flog.Debugf("UDP connection established to %s for stream %d", addr, strm.SID())
 
 	errChan := make(chan error, 2)
 	go func() { errChan <- buffer.CopyU(conn, strm) }()
@@ -36,7 +35,7 @@ func (s *Server) handleUDP(ctx context.Context, strm tnet.Strm, addr string) {
 	select {
 	case err := <-errChan:
 		if err != nil {
-			flog.Errorf("UDP stream %d to %s failed: %v", strm.SID(), addr, err)
+			flog.Errorf("UDP stream %d failed for %s -> %s: %v", strm.SID(), conn.RemoteAddr(), addr, err)
 		}
 	case <-ctx.Done():
 	}
