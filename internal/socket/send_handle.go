@@ -26,6 +26,7 @@ type TCPF struct {
 
 type SendHandle struct {
 	handle      *pcap.Handle
+	writeMu     sync.Mutex
 	srcIPv4     net.IP
 	srcIPv4RHWA net.HardwareAddr
 	srcIPv6     net.IP
@@ -204,7 +205,12 @@ func (h *SendHandle) Write(payload []byte, addr *net.UDPAddr) error {
 	if err := gopacket.SerializeLayers(buf, opts, ethLayer, ipLayer, tcpLayer, gopacket.Payload(payload)); err != nil {
 		return err
 	}
-	return h.handle.WritePacketData(buf.Bytes())
+
+	// pcap_sendpacket is not guaranteed thread-safe.
+	h.writeMu.Lock()
+	err := h.handle.WritePacketData(buf.Bytes())
+	h.writeMu.Unlock()
+	return err
 }
 
 func (h *SendHandle) getClientTCPF(dstIP net.IP, dstPort uint16) conf.TCPF {
