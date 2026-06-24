@@ -1,7 +1,6 @@
 package client
 
 import (
-	"context"
 	"time"
 
 	"paqet/internal/conf"
@@ -14,12 +13,11 @@ type timedConn struct {
 	cfg    *conf.Conf
 	conn   tnet.Conn
 	expire time.Time
-	ctx    context.Context
 }
 
-func newTimedConn(ctx context.Context, cfg *conf.Conf) (*timedConn, error) {
+func newTimedConn(cfg *conf.Conf) (*timedConn, error) {
 	var err error
-	tc := timedConn{cfg: cfg, ctx: ctx}
+	tc := timedConn{cfg: cfg}
 	tc.conn, err = tc.createConn()
 	if err != nil {
 		return nil, err
@@ -29,7 +27,7 @@ func newTimedConn(ctx context.Context, cfg *conf.Conf) (*timedConn, error) {
 }
 
 func (tc *timedConn) createConn() (tnet.Conn, error) {
-	conn, err := kcp.Dial(tc.ctx, tc.cfg.Server.Addr, tc.cfg.Transport.KCP, tc.cfg.Network)
+	conn, err := kcp.Dial(tc.cfg.Server.Addr, tc.cfg.Transport.KCP, tc.cfg.Network)
 	if err != nil {
 		return nil, err
 	}

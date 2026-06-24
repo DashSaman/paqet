@@ -21,7 +21,7 @@ func New(cfg *conf.Conf) (*Server, error) {
 }
 
 func (s *Server) Start(ctx context.Context) error {
-	listener, err := kcp.Listen(ctx, s.cfg.Transport.KCP, s.cfg.Network)
+	listener, err := kcp.Listen(s.cfg.Transport.KCP, s.cfg.Network)
 	if err != nil {
 		return fmt.Errorf("could not start KCP listener: %w", err)
 	}

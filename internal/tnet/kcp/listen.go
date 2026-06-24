@@ -1,7 +1,6 @@
 package kcp
 
 import (
-	"context"
 	"fmt"
 	"net"
 
@@ -19,9 +18,9 @@ type Listener struct {
 	listener   *kcp.Listener
 }
 
-func Listen(ctx context.Context, cfg *conf.KCP, netCfg conf.Network) (tnet.Listener, error) {
+func Listen(cfg *conf.KCP, netCfg conf.Network) (tnet.Listener, error) {
 	nCfg := netCfg
-	packetConn, err := socket.New(ctx, &nCfg)
+	packetConn, err := socket.New(&nCfg)
 	if err != nil {
 		return nil, fmt.Errorf("kcp: failed to create packetconn: %w", err)
 	}

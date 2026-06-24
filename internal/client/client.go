@@ -28,7 +28,7 @@ func New(cfg *conf.Conf) (*Client, error) {
 
 func (c *Client) Start(ctx context.Context) error {
 	for i := range c.cfg.Transport.Conn {
-		tc, err := newTimedConn(ctx, c.cfg)
+		tc, err := newTimedConn(c.cfg)
 		if err != nil {
 			flog.Errorf("failed to create connection %d: %v", i+1, err)
 			return err

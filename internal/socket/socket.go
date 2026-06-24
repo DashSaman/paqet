@@ -1,7 +1,6 @@
 package socket
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -21,13 +20,9 @@ type PacketConn struct {
 	recvHandle    *RecvHandle
 	readDeadline  atomic.Value
 	writeDeadline atomic.Value
-
-	ctx    context.Context
-	cancel context.CancelFunc
 }
 
-// &OpError{Op: "listen", Net: network, Source: nil, Addr: nil, Err: err}
-func New(ctx context.Context, cfg *conf.Network) (*PacketConn, error) {
+func New(cfg *conf.Network) (*PacketConn, error) {
 	if cfg.Port == 0 {
 		cfg.Port = 32768 + rand.Intn(32768)
 	}
@@ -43,13 +38,10 @@ func New(ctx context.Context, cfg *conf.Network) (*PacketConn, error) {
 		return nil, fmt.Errorf("failed to create receive handle on %s: %v", cfg.Interface.Name, err)
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
 	conn := &PacketConn{
 		cfg:        cfg,
 		sendHandle: sendHandle,
 		recvHandle: recvHandle,
-		ctx:        ctx,
-		cancel:     cancel,
 	}
 
 	return conn, nil
@@ -66,21 +58,20 @@ func (c *PacketConn) ReadFrom(data []byte) (n int, addr net.Addr, err error) {
 
 	for {
 		select {
-		case <-c.ctx.Done():
-			return 0, nil, c.ctx.Err()
 		case <-deadline:
 			return 0, nil, os.ErrDeadlineExceeded
 		default:
 		}
 
-		payload, addr, err := c.recvHandle.Read()
+		p, addr, err := c.recvHandle.Read()
 		if err != nil {
 			if errors.Is(err, pcap.NextErrorTimeoutExpired) {
 				continue
 			}
 			return 0, nil, err
 		}
-		return copy(data, payload), addr, nil
+
+		return copy(data, p), addr, nil
 	}
 }
 
@@ -94,8 +85,6 @@ func (c *PacketConn) WriteTo(data []byte, addr net.Addr) (n int, err error) {
 	}
 
 	select {
-	case <-c.ctx.Done():
-		return 0, c.ctx.Err()
 	case <-deadline:
 		return 0, os.ErrDeadlineExceeded
 	default:
@@ -115,15 +104,12 @@ func (c *PacketConn) WriteTo(data []byte, addr net.Addr) (n int, err error) {
 }
 
 func (c *PacketConn) Close() error {
-	c.cancel()
-
 	if c.sendHandle != nil {
 		c.sendHandle.Close()
 	}
 	if c.recvHandle != nil {
 		c.recvHandle.Close()
 	}
-
 	return nil
 }
 
