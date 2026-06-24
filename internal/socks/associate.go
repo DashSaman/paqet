@@ -91,7 +91,6 @@ func (s *Server) handleUDPConn(ctx context.Context, a *associate, d *datagram) {
 	strm, new, k, err := s.client.UDP(a.cAddr.String(), d.address())
 	if err != nil {
 		flog.Errorf("SOCKS5 failed to establish UDP stream for %s -> %s: %v", a.cAddr, d.address(), err)
-		s.client.CloseUDP(k)
 		return
 	}
 

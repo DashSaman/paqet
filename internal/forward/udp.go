@@ -34,7 +34,6 @@ func (f *Forward) handleUDPConn(ctx context.Context, conn *net.UDPConn, cAddr ne
 	strm, new, k, err := f.client.UDP(cAddr.String(), f.targetAddr)
 	if err != nil {
 		flog.Errorf("failed to establish UDP stream for %s -> %s: %v", cAddr, f.targetAddr, err)
-		f.client.CloseUDP(k)
 		return
 	}
 
