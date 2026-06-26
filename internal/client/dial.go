@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"time"
 
 	"paqet/internal/flog"
@@ -29,16 +30,21 @@ func (c *Client) newConn() (tnet.Conn, error) {
 	return tc.conn, nil
 }
 
-func (c *Client) newStrm() (tnet.Strm, error) {
-	conn, err := c.newConn()
-	if err != nil {
-		flog.Debugf("failed to open conn, retrying: %v", err)
-		return c.newStrm()
+func (c *Client) newStrm(ctx context.Context) (tnet.Strm, error) {
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		conn, err := c.newConn()
+		if err != nil {
+			flog.Debugf("failed to open conn, retrying: %v", err)
+			continue
+		}
+		strm, err := conn.OpenStrm()
+		if err != nil {
+			flog.Debugf("failed to open stream, retrying: %v", err)
+			continue
+		}
+		return strm, nil
 	}
-	strm, err := conn.OpenStrm()
-	if err != nil {
-		flog.Debugf("failed to open stream, retrying: %v", err)
-		return c.newStrm()
-	}
-	return strm, nil
 }

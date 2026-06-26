@@ -50,6 +50,7 @@ func (s *Server) serveTCP(ctx context.Context, listener net.Listener) {
 				continue
 			}
 		}
+
 		go func() {
 			defer conn.Close()
 			s.handleTCPConn(ctx, conn)

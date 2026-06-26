@@ -31,7 +31,7 @@ func (f *Forward) serveUDP(ctx context.Context, conn *net.UDPConn) {
 }
 
 func (f *Forward) handleUDPConn(ctx context.Context, conn *net.UDPConn, cAddr netip.AddrPort, buf []byte) {
-	strm, new, k, err := f.client.UDP(cAddr.String(), f.targetAddr)
+	strm, new, k, err := f.client.UDP(ctx, cAddr.String(), f.targetAddr)
 	if err != nil {
 		flog.Errorf("failed to establish UDP stream for %s -> %s: %v", cAddr, f.targetAddr, err)
 		return

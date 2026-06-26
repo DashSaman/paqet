@@ -9,7 +9,7 @@ import (
 )
 
 func (s *Server) handleConnect(ctx context.Context, conn net.Conn, req *request) {
-	strm, err := s.client.TCP(req.address())
+	strm, err := s.client.TCP(ctx, req.address())
 	if err != nil {
 		flog.Errorf("SOCKS5 failed to establish TCP stream for %s -> %s: %v", conn.RemoteAddr(), req.address(), err)
 		s.write(conn, repFailure)

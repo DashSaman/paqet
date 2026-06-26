@@ -1,13 +1,15 @@
 package client
 
 import (
+	"context"
+
 	"paqet/internal/flog"
 	"paqet/internal/pkg/hash"
 	"paqet/internal/protocol"
 	"paqet/internal/tnet"
 )
 
-func (c *Client) UDP(lAddr, tAddr string) (tnet.Strm, bool, uint64, error) {
+func (c *Client) UDP(ctx context.Context, lAddr, tAddr string) (tnet.Strm, bool, uint64, error) {
 	key := hash.AddrPair(lAddr, tAddr)
 	c.udpPool.mu.RLock()
 	if strm, ok := c.udpPool.strms[key]; ok {
@@ -17,7 +19,7 @@ func (c *Client) UDP(lAddr, tAddr string) (tnet.Strm, bool, uint64, error) {
 	}
 	c.udpPool.mu.RUnlock()
 
-	strm, err := c.newStrm()
+	strm, err := c.newStrm(ctx)
 	if err != nil {
 		flog.Debugf("failed to create stream for UDP %s -> %s: %v", lAddr, tAddr, err)
 		return nil, false, 0, err
@@ -29,13 +31,17 @@ func (c *Client) UDP(lAddr, tAddr string) (tnet.Strm, bool, uint64, error) {
 		strm.Close()
 		return nil, false, 0, err
 	}
+
+	stop := context.AfterFunc(ctx, func() { strm.Close() })
 	p := protocol.Proto{Type: protocol.PUDP, Addr: taddr}
 	err = p.Write(strm)
 	if err != nil {
+		stop()
 		flog.Debugf("failed to write UDP protocol for %s -> %s on stream %d: %v", lAddr, tAddr, strm.SID(), err)
 		strm.Close()
 		return nil, false, 0, err
 	}
+	stop()
 
 	c.udpPool.mu.Lock()
 	if sstrm, ok := c.udpPool.strms[key]; ok {

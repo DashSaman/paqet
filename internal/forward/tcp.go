@@ -30,7 +30,7 @@ func (f *Forward) serveTCP(ctx context.Context, listener net.Listener) {
 }
 
 func (f *Forward) handleTCPConn(ctx context.Context, conn net.Conn) {
-	strm, err := f.client.TCP(f.targetAddr)
+	strm, err := f.client.TCP(ctx, f.targetAddr)
 	if err != nil {
 		flog.Errorf("failed to establish stream for %s -> %s: %v", conn.RemoteAddr(), f.targetAddr, err)
 		return
