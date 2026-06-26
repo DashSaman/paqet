@@ -113,10 +113,8 @@ func (s *Server) handleUDPConn(ctx context.Context, a *associate, d *datagram) {
 }
 
 func (s *Server) handleUDPStrm(ctx context.Context, strm tnet.Strm, a *associate, hdr []byte) {
-	go func() {
-		<-ctx.Done()
-		strm.Close()
-	}()
+	stop := context.AfterFunc(ctx, func() { strm.Close() })
+	defer stop()
 
 	buf := make([]byte, buffer.UPool)
 	hlen := copy(buf, hdr)

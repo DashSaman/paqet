@@ -52,10 +52,8 @@ func (f *Forward) handleUDPConn(ctx context.Context, conn *net.UDPConn, cAddr ne
 }
 
 func (f *Forward) handleUDPStrm(ctx context.Context, strm tnet.Strm, conn *net.UDPConn, cAddr netip.AddrPort) {
-	go func() {
-		<-ctx.Done()
-		strm.Close()
-	}()
+	stop := context.AfterFunc(ctx, func() { strm.Close() })
+	defer stop()
 
 	buf := make([]byte, buffer.UPool)
 	for {
