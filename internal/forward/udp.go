@@ -37,11 +37,15 @@ func (f *Forward) handleUDPConn(ctx context.Context, conn *net.UDPConn, cAddr ne
 		return
 	}
 
-	if _, err := strm.Write(buf); err != nil {
+	strm.SetWriteDeadline(time.Now().Add(8 * time.Second))
+	_, err = strm.Write(buf)
+	strm.SetWriteDeadline(time.Time{})
+	if err != nil {
 		flog.Errorf("failed to forward bytes from %s -> %s: %v", cAddr, f.targetAddr, err)
 		f.client.CloseUDP(k)
 		return
 	}
+
 	if new {
 		flog.Infof("accepted UDP connection %d for %s -> %s", strm.SID(), cAddr, f.targetAddr)
 		go func() {
@@ -57,9 +61,9 @@ func (f *Forward) handleUDPStrm(ctx context.Context, strm tnet.Strm, conn *net.U
 
 	buf := make([]byte, buffer.UPool)
 	for {
-		strm.SetDeadline(time.Now().Add(8 * time.Second))
+		strm.SetReadDeadline(time.Now().Add(8 * time.Second))
 		n, err := strm.Read(buf)
-		strm.SetDeadline(time.Time{})
+		strm.SetReadDeadline(time.Time{})
 		if err != nil {
 			flog.Errorf("UDP stream %d read failed for %s -> %s: %v", strm.SID(), cAddr, f.targetAddr, err)
 			return
