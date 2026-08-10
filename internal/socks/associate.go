@@ -74,12 +74,12 @@ func (s *Server) serveUDP(ctx context.Context, a *associate) {
 			return
 		}
 		if !a.accept(cAddr) {
-			flog.Debugf("SOCKS5 dropping UDP from unexpected source %s (want %s)", cAddr, a.cAddr.IP)
+			flog.Debugf("SOCKS5 UDP %s: unexpected source (want %s)", cAddr, a.cAddr.IP)
 			continue
 		}
 		d, err := decodeDatagram(buf[:n])
 		if err != nil {
-			flog.Debugf("SOCKS5 dropping malformed UDP datagram from %s: %v", cAddr, err)
+			flog.Debugf("SOCKS5 UDP %s: malformed datagram: %v", cAddr, err)
 			continue
 		}
 		s.udpToStrm(ctx, a, d)
