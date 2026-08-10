@@ -82,11 +82,11 @@ func (s *Server) serveUDP(ctx context.Context, a *associate) {
 			flog.Debugf("SOCKS5 dropping malformed UDP datagram from %s: %v", cAddr, err)
 			continue
 		}
-		s.handleUDPConn(ctx, a, d)
+		s.udpToStrm(ctx, a, d)
 	}
 }
 
-func (s *Server) handleUDPConn(ctx context.Context, a *associate, d *datagram) {
+func (s *Server) udpToStrm(ctx context.Context, a *associate, d *datagram) {
 	if len(d.data) > buffer.UDPSize {
 		flog.Debugf("SOCKS5 UDP %s -> %s: payload too large, %d bytes", a.cAddr, d.address(), len(d.data))
 		return
@@ -110,12 +110,12 @@ func (s *Server) handleUDPConn(ctx context.Context, a *associate, d *datagram) {
 		hdr := (&datagram{atyp: d.atyp, addr: d.addr, port: d.port}).bytes()
 		go func() {
 			defer s.client.CloseUDP(k, strm)
-			s.handleUDPStrm(ctx, strm, a, hdr, k)
+			s.strmToUDP(ctx, strm, a, hdr, k)
 		}()
 	}
 }
 
-func (s *Server) handleUDPStrm(ctx context.Context, strm tnet.Strm, a *associate, hdr []byte, k uint64) {
+func (s *Server) strmToUDP(ctx context.Context, strm tnet.Strm, a *associate, hdr []byte, k uint64) {
 	stop := context.AfterFunc(ctx, func() { strm.Close() })
 	defer stop()
 
