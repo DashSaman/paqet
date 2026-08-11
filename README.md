@@ -3,22 +3,16 @@
 [![Go Version](https://img.shields.io/badge/go-1.25+-blue.svg)](https://golang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-`paqet` is a bidirectional packet level proxy built using raw sockets. It forwards traffic from a local client to a remote server, bypassing the host operating system's TCP/IP stack, using KCP for secure, reliable transport.
+paqet is a raw-packet proxy that tunnels traffic inside raw TCP packets. Instead of relying on the host's TCP/IP stack, it crafts and captures packets directly, while KCP provides fast, reliable, encrypted transport.
 
-> **⚠️ Development Status Notice**
->
-> This project is in **active development**. APIs, configuration formats, and interfaces may change without notice. Use with caution in production environments.
+> [!WARNING]
+> This project is in active development. APIs, configuration formats, and interfaces may change without notice. Use with caution in production environments.
 
-## How It Works
+## The Idea
 
-`paqet` captures packets using `pcap` and injects crafted TCP packets containing encrypted transport data. KCP provides reliable, encrypted communication optimized for high-loss networks using aggressive retransmission, forward error correction, and symmetric encryption.
+Conventional applications rely on the host's TCP/IP stack, placing the kernel in the path of every connection, where it tracks each packet.
 
-```
-[Your App] <------> [paqet Client] <===== Raw TCP Packet =====> [paqet Server] <------> [Target Server]
-(e.g. curl)        (localhost:1080)        (Internet)          (Public IP:PORT)     (e.g. https://httpbin.org)
-```
-
-`paqet` use cases include bypassing firewalls that detect standard handshake protocols and kernel-level connection tracking, as well as network security research. While more complex to configure than general-purpose VPN solutions, it offers granular control at the packet level.
+paqet operates on raw packets instead. It crafts TCP packets directly and uses pcap to capture inbound ones, treating each as a self-contained, stateless datagram. The traffic still looks ordinary on the wire, while KCP and smux provide a fast, reliable, encrypted, and multiplexed transport layer on top. paqet may bypass firewalls that rely on handshakes or connection tracking, which makes it useful for security research. Configuration is more complex than a VPN, but gives you finer control in return.
 
 ## Getting Started
 
@@ -140,8 +134,7 @@ Although packets are handled at a low level, the OS kernel can still see incomin
 
 You **must** configure `iptables` on the server to prevent the kernel from interfering.
 
-> **⚠️ Important - Avoid Standard Ports**
->
+> [!IMPORTANT]
 > Do not use ports 80, 443, or any other standard ports, because iptables rules can also affect outgoing connections from the server. Choose non-standard ports (e.g., 9999, 8888, or other high-numbered ports) for your server configuration.
 
 Run these commands as root on your server:
@@ -231,7 +224,8 @@ paqet uses unified YAML configuration for client and server. The `role` field mu
 
 The `transport.kcp.block` parameter determines the encryption method.
 
-⚠️ **Warning:** `none` and `null` modes disable authentication, anyone with your server IP and port can connect.
+> [!WARNING]
+> `none` and `null` modes disable authentication, anyone with your server IP and port can connect.
 
 - **`none`** - Plaintext with protocol header (protocol-compatible)
 - **`null`** - Raw data, no header (highest performance, least secure)
