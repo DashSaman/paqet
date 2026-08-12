@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"paqet/cmd/dump"
-	"paqet/cmd/iface"
 	"paqet/cmd/ping"
 	"paqet/cmd/run"
 	"paqet/cmd/secret"
@@ -24,7 +23,6 @@ func main() {
 	rootCmd.AddCommand(dump.Cmd)
 	rootCmd.AddCommand(ping.Cmd)
 	rootCmd.AddCommand(secret.Cmd)
-	rootCmd.AddCommand(iface.Cmd)
 	rootCmd.AddCommand(version.Cmd)
 
 	if err := rootCmd.Execute(); err != nil {
