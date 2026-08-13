@@ -292,7 +292,7 @@ This means a rule like `ufw deny <PORT>` will have no effect on the proxy's oper
 
 ## Acknowledgments
 
-This work draws inspiration from the research and implementation in the [gfw_resist_tcp_proxy](https://github.com/GFW-knocker/gfw_resist_tcp_proxy) project by GFW-knocker, which explored the use of raw sockets to circumvent certain forms of network filtering. This project serves as a Go-based exploration of those concepts.
+This work implements an idea from [gfw_resist_tcp_proxy](https://github.com/GFW-knocker/gfw_resist_tcp_proxy) by GFW-knocker, which explored the use of raw sockets to circumvent certain forms of network filtering. This project is a Go implementation of that approach.
 
 - Uses [pcap](https://github.com/the-tcpdump-group/libpcap) for low-level packet capture and injection
 - Uses [gopacket](https://github.com/gopacket/gopacket) for raw packet crafting and decoding
