@@ -8,6 +8,15 @@ import (
 	"github.com/xtaci/kcp-go/v5"
 )
 
+const (
+	efficientMTU           = 1420
+	efficientWindow        = 4096
+	efficientSmuxBuffer    = 8 * 1024 * 1024
+	efficientStreamBuffer  = 4 * 1024 * 1024
+	efficientKeepAliveSec  = 5
+	efficientKeepTimeoutSec = 20
+)
+
 type KCP struct {
 	Mode         string `yaml:"mode"`
 	NoDelay      int    `yaml:"nodelay"`
@@ -41,19 +50,34 @@ func (k *KCP) setDefaults(role string) {
 	if k.Mode == "" {
 		k.Mode = "fast"
 	}
+
+	// The efficient preset is optimized for high-throughput links where
+	// unnecessary retransmits/ACKs are more expensive than a few extra MiB of
+	// buffering. Keep the legacy defaults for every existing preset so this
+	// remains backwards compatible with upstream configurations.
+	efficient := k.Mode == "efficient"
+
 	if k.MTU == 0 {
-		k.MTU = 1350
+		if efficient {
+			k.MTU = efficientMTU
+		} else {
+			k.MTU = 1350
+		}
 	}
 
 	if k.Rcvwnd == 0 {
-		if role == "server" {
+		if efficient {
+			k.Rcvwnd = efficientWindow
+		} else if role == "server" {
 			k.Rcvwnd = 1024
 		} else {
 			k.Rcvwnd = 512
 		}
 	}
 	if k.Sndwnd == 0 {
-		if role == "server" {
+		if efficient {
+			k.Sndwnd = efficientWindow
+		} else if role == "server" {
 			k.Sndwnd = 1024
 		} else {
 			k.Sndwnd = 128
@@ -72,24 +96,40 @@ func (k *KCP) setDefaults(role string) {
 	}
 
 	if k.Smuxbuf == 0 {
-		k.Smuxbuf = 4 * 1024 * 1024
+		if efficient {
+			k.Smuxbuf = efficientSmuxBuffer
+		} else {
+			k.Smuxbuf = 4 * 1024 * 1024
+		}
 	}
 	if k.Streambuf == 0 {
-		k.Streambuf = 2 * 1024 * 1024
+		if efficient {
+			k.Streambuf = efficientStreamBuffer
+		} else {
+			k.Streambuf = 2 * 1024 * 1024
+		}
 	}
 
 	if k.Smuxkalive_ == 0 {
-		k.Smuxkalive_ = 2
+		if efficient {
+			k.Smuxkalive_ = efficientKeepAliveSec
+		} else {
+			k.Smuxkalive_ = 2
+		}
 	}
 	if k.Smuxktimeout_ == 0 {
-		k.Smuxktimeout_ = 8
+		if efficient {
+			k.Smuxktimeout_ = efficientKeepTimeoutSec
+		} else {
+			k.Smuxktimeout_ = 8
+		}
 	}
 }
 
 func (k *KCP) validate() []error {
 	var errors []error
 
-	validModes := []string{"normal", "fast", "fast2", "fast3", "manual"}
+	validModes := []string{"normal", "fast", "fast2", "fast3", "efficient", "manual"}
 	if !slices.Contains(validModes, k.Mode) {
 		errors = append(errors, fmt.Errorf("KCP mode must be one of: %v", validModes))
 	}
