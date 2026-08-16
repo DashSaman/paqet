@@ -7,32 +7,55 @@ import (
 	"github.com/xtaci/smux"
 )
 
-func aplConf(conn *kcp.UDPSession, cfg *conf.KCP) {
-	var noDelay, interval, resend, noCongestion int
-	var wDelay, ackNoDelay bool
+type modeProfile struct {
+	noDelay      int
+	interval     int
+	resend       int
+	noCongestion int
+	wDelay       bool
+	ackNoDelay   bool
+}
+
+func profileForMode(cfg *conf.KCP) modeProfile {
 	switch cfg.Mode {
 	case "normal":
-		noDelay, interval, resend, noCongestion = 0, 40, 2, 1
-		wDelay, ackNoDelay = true, false
+		return modeProfile{0, 40, 2, 1, true, false}
 	case "fast":
-		noDelay, interval, resend, noCongestion = 0, 30, 2, 1
-		wDelay, ackNoDelay = true, false
+		return modeProfile{0, 30, 2, 1, true, false}
 	case "fast2":
-		noDelay, interval, resend, noCongestion = 1, 20, 2, 1
-		wDelay, ackNoDelay = false, true
+		return modeProfile{1, 20, 2, 1, false, true}
 	case "fast3":
-		noDelay, interval, resend, noCongestion = 1, 10, 2, 1
-		wDelay, ackNoDelay = false, true
+		return modeProfile{1, 10, 2, 1, false, true}
+	case "efficient":
+		// Low-overhead profile for healthy/high-throughput paths. It avoids
+		// aggressive fast-resend and immediate ACKs, which can spend extra
+		// bandwidth when the path is not being throttled or heavily lossy.
+		return modeProfile{0, 10, 0, 1, true, false}
 	case "manual":
-		noDelay, interval, resend, noCongestion = cfg.NoDelay, cfg.Interval, cfg.Resend, cfg.NoCongestion
-		wDelay, ackNoDelay = cfg.WDelay, cfg.AckNoDelay
+		return modeProfile{
+			noDelay:      cfg.NoDelay,
+			interval:     cfg.Interval,
+			resend:       cfg.Resend,
+			noCongestion: cfg.NoCongestion,
+			wDelay:       cfg.WDelay,
+			ackNoDelay:   cfg.AckNoDelay,
+		}
+	default:
+		// Validation rejects unknown modes before transport startup. Returning
+		// the conservative normal profile keeps this helper deterministic in
+		// tests and defensive callers.
+		return modeProfile{0, 40, 2, 1, true, false}
 	}
+}
 
-	conn.SetNoDelay(noDelay, interval, resend, noCongestion)
+func aplConf(conn *kcp.UDPSession, cfg *conf.KCP) {
+	p := profileForMode(cfg)
+
+	conn.SetNoDelay(p.noDelay, p.interval, p.resend, p.noCongestion)
 	conn.SetWindowSize(cfg.Sndwnd, cfg.Rcvwnd)
 	conn.SetMtu(cfg.MTU)
-	conn.SetWriteDelay(wDelay)
-	conn.SetACKNoDelay(ackNoDelay)
+	conn.SetWriteDelay(p.wDelay)
+	conn.SetACKNoDelay(p.ackNoDelay)
 	conn.SetStreamMode(true)
 	conn.SetDSCP(46)
 }
