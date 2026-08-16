@@ -105,7 +105,7 @@ func (h *SendHandle) buildIPv4Header(e *encoder, dstIP net.IP) {
 		TOS:      184,
 		TTL:      64,
 		Flags:    layers.IPv4DontFragment,
-		Protocol: layers.LayerTypeTCP,
+		Protocol: layers.IPProtocolTCP,
 		SrcIP:    h.srcIPv4,
 		DstIP:    dstIP,
 	}
