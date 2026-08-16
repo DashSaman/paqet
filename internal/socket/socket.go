@@ -14,6 +14,19 @@ import (
 	"paqet/internal/conf"
 )
 
+var rawPortSeq atomic.Uint32
+
+func init() {
+	// Start from a randomized point, then allocate sequentially. This preserves
+	// the old ephemeral range while preventing accidental local-port collisions
+	// between multiple KCP connections created by the same Paqet process.
+	rawPortSeq.Store(uint32(rand.Intn(32768)))
+}
+
+func nextRawPort() int {
+	return 32768 + int((rawPortSeq.Add(1)-1)%32768)
+}
+
 type PacketConn struct {
 	cfg           *conf.Network
 	sendHandle    *SendHandle
@@ -22,9 +35,12 @@ type PacketConn struct {
 	writeDeadline atomic.Value
 }
 
-func New(cfg *conf.Network) (*PacketConn, error) {
+// New accepts an optional fixed peer. Dialed/client sessions pass their remote
+// endpoint so the receive path can install a narrow BPF filter and avoid
+// per-packet address allocations. Listener/server sessions omit it.
+func New(cfg *conf.Network, peer ...*net.UDPAddr) (*PacketConn, error) {
 	if cfg.Port == 0 {
-		cfg.Port = 32768 + rand.Intn(32768)
+		cfg.Port = nextRawPort()
 	}
 
 	sendHandle, err := NewSendHandle(cfg)
@@ -32,7 +48,7 @@ func New(cfg *conf.Network) (*PacketConn, error) {
 		return nil, fmt.Errorf("failed to create send handle on %s: %v", cfg.Interface.Name, err)
 	}
 
-	recvHandle, err := NewRecvHandle(cfg)
+	recvHandle, err := NewRecvHandle(cfg, peer...)
 	if err != nil {
 		sendHandle.Close()
 		return nil, fmt.Errorf("failed to create receive handle on %s: %v", cfg.Interface.Name, err)
