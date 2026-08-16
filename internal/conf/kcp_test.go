@@ -55,3 +55,22 @@ func TestLegacyFastDefaultsRemainCompatible(t *testing.T) {
 		t.Fatalf("legacy keepalive defaults changed: %d/%d", k.Smuxkalive_, k.Smuxktimeout_)
 	}
 }
+
+func TestKCPStatsInterval(t *testing.T) {
+	k := &KCP{Mode: "efficient", Key: "test-key", StatsInterval_: 15}
+	k.setDefaults("client")
+	if errs := k.validate(); len(errs) != 0 {
+		t.Fatalf("stats interval validation failed: %v", errs)
+	}
+	if k.StatsInterval != 15*time.Second {
+		t.Fatalf("StatsInterval = %s, want 15s", k.StatsInterval)
+	}
+}
+
+func TestKCPStatsIntervalRejectsInvalidValue(t *testing.T) {
+	k := &KCP{Mode: "efficient", Key: "test-key", StatsInterval_: 3601}
+	k.setDefaults("client")
+	if errs := k.validate(); len(errs) == 0 {
+		t.Fatal("stats_interval > 3600 must fail validation")
+	}
+}
