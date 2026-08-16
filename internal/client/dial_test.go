@@ -14,17 +14,20 @@ type schedulerTestConn struct {
 	streams int
 }
 
-func (c *schedulerTestConn) OpenStrm() (tnet.Strm, error)       { return nil, nil }
-func (c *schedulerTestConn) AcceptStrm() (tnet.Strm, error)     { return nil, nil }
-func (c *schedulerTestConn) Ping(bool) error                    { return nil }
-func (c *schedulerTestConn) Close() error                       { c.closed = true; return nil }
-func (c *schedulerTestConn) LocalAddr() net.Addr                { return nil }
-func (c *schedulerTestConn) RemoteAddr() net.Addr               { return nil }
-func (c *schedulerTestConn) SetDeadline(time.Time) error        { return nil }
-func (c *schedulerTestConn) SetReadDeadline(time.Time) error    { return nil }
-func (c *schedulerTestConn) SetWriteDeadline(time.Time) error   { return nil }
-func (c *schedulerTestConn) IsClosed() bool                     { return c.closed }
-func (c *schedulerTestConn) NumStreams() int                    { return c.streams }
+func (c *schedulerTestConn) OpenStrm() (tnet.Strm, error)   { return nil, nil }
+func (c *schedulerTestConn) AcceptStrm() (tnet.Strm, error) { return nil, nil }
+func (c *schedulerTestConn) Ping(bool) error                { return nil }
+func (c *schedulerTestConn) Close() error {
+	c.closed = true
+	return nil
+}
+func (c *schedulerTestConn) LocalAddr() net.Addr              { return nil }
+func (c *schedulerTestConn) RemoteAddr() net.Addr             { return nil }
+func (c *schedulerTestConn) SetDeadline(time.Time) error      { return nil }
+func (c *schedulerTestConn) SetReadDeadline(time.Time) error  { return nil }
+func (c *schedulerTestConn) SetWriteDeadline(time.Time) error { return nil }
+func (c *schedulerTestConn) IsClosed() bool                   { return c.closed }
+func (c *schedulerTestConn) NumStreams() int                  { return c.streams }
 
 func testClientWithConns(conns ...*schedulerTestConn) (*Client, []*timedConn) {
 	items := make([]*timedConn, 0, len(conns))
