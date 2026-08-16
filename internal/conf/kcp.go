@@ -40,9 +40,11 @@ type KCP struct {
 
 	Smuxkalive_   int `yaml:"smuxkalive"`
 	Smuxktimeout_ int `yaml:"smuxktimeout"`
+	StatsInterval_ int `yaml:"stats_interval"`
 
 	Smuxkalive   time.Duration  `yaml:"-"`
 	Smuxktimeout time.Duration  `yaml:"-"`
+	StatsInterval time.Duration `yaml:"-"`
 	Block        kcp.BlockCrypt `yaml:"-"`
 }
 
@@ -164,9 +166,13 @@ func (k *KCP) validate() []error {
 	if k.Streambuf < 1024 {
 		errors = append(errors, fmt.Errorf("KCP streambuf must be >= 1024 bytes"))
 	}
+	if k.StatsInterval_ < 0 || k.StatsInterval_ > 3600 {
+		errors = append(errors, fmt.Errorf("KCP stats_interval must be between 0-3600 seconds"))
+	}
 
 	k.Smuxkalive = time.Duration(k.Smuxkalive_) * time.Second
 	k.Smuxktimeout = time.Duration(k.Smuxktimeout_) * time.Second
+	k.StatsInterval = time.Duration(k.StatsInterval_) * time.Second
 
 	return errors
 }
