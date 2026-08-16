@@ -9,11 +9,11 @@ import (
 )
 
 const (
-	efficientMTU           = 1420
-	efficientWindow        = 4096
-	efficientSmuxBuffer    = 8 * 1024 * 1024
-	efficientStreamBuffer  = 4 * 1024 * 1024
-	efficientKeepAliveSec  = 5
+	efficientMTU            = 1420
+	efficientWindow         = 4096
+	efficientSmuxBuffer     = 8 * 1024 * 1024
+	efficientStreamBuffer   = 4 * 1024 * 1024
+	efficientKeepAliveSec   = 5
 	efficientKeepTimeoutSec = 20
 )
 
