@@ -30,7 +30,7 @@ type encoder struct {
 	ip6 layers.IPv6
 	tcp layers.TCP
 
-	opts [5]layers.TCPOption
+	opts [7]layers.TCPOption
 	ts   [8]byte
 	mss  [2]byte
 	ws   [1]byte
@@ -47,6 +47,7 @@ type SendHandle struct {
 	srcIPv6RHWA net.HardwareAddr
 	srcPort     uint16
 	time        uint32
+	timestamps  bool
 	tsCounter   atomic.Uint32
 	tcpF        tcpF
 	ePool       sync.Pool
@@ -70,10 +71,11 @@ func NewSendHandle(cfg *conf.Network) (*SendHandle, error) {
 	}
 
 	sh := &SendHandle{
-		handle:  handle,
-		srcPort: uint16(cfg.Port),
-		tcpF:    tcpF{tcpF: iterator.Iterator[conf.TCPF]{Items: cfg.TCP.LF}, clientTCPF: make(map[uint64]*iterator.Iterator[conf.TCPF])},
-		time:    uint32(time.Now().UnixNano() / int64(time.Millisecond)),
+		handle:     handle,
+		srcPort:    uint16(cfg.Port),
+		timestamps: cfg.TCP.TimestampsEnabled(),
+		tcpF:       tcpF{tcpF: iterator.Iterator[conf.TCPF]{Items: cfg.TCP.LF}, clientTCPF: make(map[uint64]*iterator.Iterator[conf.TCPF])},
+		time:       uint32(time.Now().UnixNano() / int64(time.Millisecond)),
 		ePool: sync.Pool{
 			New: func() any {
 				return &encoder{
@@ -129,32 +131,50 @@ func (h *SendHandle) buildTCPHeader(e *encoder, dstPort uint16, f conf.TCPF) {
 	}
 
 	counter := h.tsCounter.Add(1)
-	tsVal := h.time + (counter >> 3)
 	opts := e.opts[:0]
 	if f.SYN {
-		binary.BigEndian.PutUint32(e.ts[0:4], tsVal)
-		binary.BigEndian.PutUint32(e.ts[4:8], 0)
 		opts = append(opts,
 			layers.TCPOption{OptionType: layers.TCPOptionKindMSS, OptionLength: 4, OptionData: e.mss[:]},
 			layers.TCPOption{OptionType: layers.TCPOptionKindSACKPermitted, OptionLength: 2},
-			layers.TCPOption{OptionType: layers.TCPOptionKindTimestamps, OptionLength: 10, OptionData: e.ts[:]},
-			layers.TCPOption{OptionType: layers.TCPOptionKindNop},
-			layers.TCPOption{OptionType: layers.TCPOptionKindWindowScale, OptionLength: 3, OptionData: e.ws[:]},
 		)
+
+		if h.timestamps {
+			tsVal := h.time + (counter >> 3)
+			binary.BigEndian.PutUint32(e.ts[0:4], tsVal)
+			binary.BigEndian.PutUint32(e.ts[4:8], 0)
+			opts = append(opts,
+				layers.TCPOption{OptionType: layers.TCPOptionKindTimestamps, OptionLength: 10, OptionData: e.ts[:]},
+				layers.TCPOption{OptionType: layers.TCPOptionKindNop},
+				layers.TCPOption{OptionType: layers.TCPOptionKindWindowScale, OptionLength: 3, OptionData: e.ws[:]},
+			)
+		} else {
+			// Keep the SYN options 32-bit aligned without paying for the 10-byte
+			// timestamp option. Existing behavior remains the default.
+			opts = append(opts,
+				layers.TCPOption{OptionType: layers.TCPOptionKindNop},
+				layers.TCPOption{OptionType: layers.TCPOptionKindWindowScale, OptionLength: 3, OptionData: e.ws[:]},
+				layers.TCPOption{OptionType: layers.TCPOptionKindNop},
+				layers.TCPOption{OptionType: layers.TCPOptionKindNop},
+			)
+		}
+
 		e.tcp.Seq = 1 + (counter & 0x7)
 		e.tcp.Ack = 0
 		if f.ACK {
 			e.tcp.Ack = e.tcp.Seq + 1
 		}
 	} else {
-		tsEcr := tsVal - (counter%200 + 50)
-		binary.BigEndian.PutUint32(e.ts[0:4], tsVal)
-		binary.BigEndian.PutUint32(e.ts[4:8], tsEcr)
-		opts = append(opts,
-			layers.TCPOption{OptionType: layers.TCPOptionKindNop},
-			layers.TCPOption{OptionType: layers.TCPOptionKindNop},
-			layers.TCPOption{OptionType: layers.TCPOptionKindTimestamps, OptionLength: 10, OptionData: e.ts[:]},
-		)
+		if h.timestamps {
+			tsVal := h.time + (counter >> 3)
+			tsEcr := tsVal - (counter%200 + 50)
+			binary.BigEndian.PutUint32(e.ts[0:4], tsVal)
+			binary.BigEndian.PutUint32(e.ts[4:8], tsEcr)
+			opts = append(opts,
+				layers.TCPOption{OptionType: layers.TCPOptionKindNop},
+				layers.TCPOption{OptionType: layers.TCPOptionKindNop},
+				layers.TCPOption{OptionType: layers.TCPOptionKindTimestamps, OptionLength: 10, OptionData: e.ts[:]},
+			)
+		}
 		seq := h.time + (counter << 7)
 		e.tcp.Seq = seq
 		e.tcp.Ack = seq - (counter & 0x3FF) + 1400
