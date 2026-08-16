@@ -14,7 +14,7 @@ import (
 
 func Dial(addr *net.UDPAddr, cfg *conf.KCP, netCfg conf.Network) (tnet.Conn, error) {
 	nCfg := netCfg
-	packetConn, err := socket.New(&nCfg)
+	packetConn, err := socket.New(&nCfg, addr)
 	if err != nil {
 		return nil, fmt.Errorf("kcp: failed to create packetconn: %w", err)
 	}

@@ -35,6 +35,24 @@ func (c *Conn) AcceptStrm() (tnet.Strm, error) {
 	return &Strm{strm}, nil
 }
 
+// IsClosed exposes the smux session state without creating a probe stream.
+// This lets the client scheduler avoid the old per-stream Ping(false), which
+// generated an extra SYN/FIN control exchange for every application stream.
+func (c *Conn) IsClosed() bool {
+	return c == nil || c.Session == nil || c.Session.IsClosed()
+}
+
+// NumStreams is used by the client scheduler to distribute new application
+// streams toward the least-loaded KCP/smux session instead of blindly using
+// round-robin. It is advisory only and does not change an existing stream's
+// session once opened.
+func (c *Conn) NumStreams() int {
+	if c == nil || c.Session == nil {
+		return 0
+	}
+	return c.Session.NumStreams()
+}
+
 func (c *Conn) Ping(wait bool) error {
 	strm, err := c.Session.OpenStream()
 	if err != nil {

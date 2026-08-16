@@ -40,7 +40,6 @@ func (c *Client) Start(ctx context.Context) error {
 		}
 	})
 
-	go c.ticker(ctx)
 	go c.udpPool.ticker(ctx)
 
 	ipv4Addr := "<nil>"
