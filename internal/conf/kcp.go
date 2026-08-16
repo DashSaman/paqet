@@ -38,14 +38,14 @@ type KCP struct {
 	Smuxbuf   int `yaml:"smuxbuf"`
 	Streambuf int `yaml:"streambuf"`
 
-	Smuxkalive_   int `yaml:"smuxkalive"`
-	Smuxktimeout_ int `yaml:"smuxktimeout"`
+	Smuxkalive_    int `yaml:"smuxkalive"`
+	Smuxktimeout_  int `yaml:"smuxktimeout"`
 	StatsInterval_ int `yaml:"stats_interval"`
 
-	Smuxkalive   time.Duration  `yaml:"-"`
-	Smuxktimeout time.Duration  `yaml:"-"`
-	StatsInterval time.Duration `yaml:"-"`
-	Block        kcp.BlockCrypt `yaml:"-"`
+	Smuxkalive    time.Duration  `yaml:"-"`
+	Smuxktimeout  time.Duration  `yaml:"-"`
+	StatsInterval time.Duration  `yaml:"-"`
+	Block         kcp.BlockCrypt `yaml:"-"`
 }
 
 func (k *KCP) setDefaults(role string) {
