@@ -29,17 +29,17 @@ func TestDiffKCPStats(t *testing.T) {
 		LostSegs:        3,
 	}
 	current := &kcpgo.Snmp{
-		BytesSent:           3000,
-		BytesReceived:       1500,
-		OutBytes:            3500,
-		InBytes:             1800,
-		OutPkts:             25,
-		InPkts:              14,
-		RetransSegs:         4,
-		FastRetransSegs:     6,
-		EarlyRetransSegs:    2,
-		LostSegs:            8,
-		RepeatSegs:          1,
+		BytesSent:        3000,
+		BytesReceived:    1500,
+		OutBytes:         3500,
+		InBytes:          1800,
+		OutPkts:          25,
+		InPkts:           14,
+		RetransSegs:      4,
+		FastRetransSegs:  6,
+		EarlyRetransSegs: 2,
+		LostSegs:         8,
+		RepeatSegs:       1,
 	}
 
 	got := diffKCPStats(current, previous)
