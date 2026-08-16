@@ -25,6 +25,7 @@ var Cmd = &cobra.Command{
 			log.Fatalf("failed to parse configuration: %v", err)
 		}
 		initialize(cfg)
+		startKCPStats(cfg)
 
 		switch cfg.Role {
 		case "client":
