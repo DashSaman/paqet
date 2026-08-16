@@ -42,6 +42,16 @@ func cloneUDPAddr(addr *net.UDPAddr) *net.UDPAddr {
 	}
 }
 
+func recvBPFFilter(localPort int, peer *net.UDPAddr) string {
+	if peer == nil {
+		return fmt.Sprintf("tcp and dst port %d", localPort)
+	}
+	return fmt.Sprintf(
+		"tcp and src host %s and src port %d and dst port %d",
+		peer.IP.String(), peer.Port, localPort,
+	)
+}
+
 // NewRecvHandle accepts an optional fixed peer. Client KCP sessions always
 // have a single remote endpoint, so pinning that endpoint lets libpcap reject
 // unrelated packets in kernel space and lets Read reuse one immutable address
@@ -66,14 +76,7 @@ func NewRecvHandle(cfg *conf.Network, peer ...*net.UDPAddr) (*RecvHandle, error)
 		fixedPeer = cloneUDPAddr(peer[0])
 	}
 
-	filter := fmt.Sprintf("tcp and dst port %d", cfg.Port)
-	if fixedPeer != nil {
-		filter = fmt.Sprintf(
-			"tcp and src host %s and src port %d and dst port %d",
-			fixedPeer.IP.String(), fixedPeer.Port, cfg.Port,
-		)
-	}
-	if err := handle.SetBPFFilter(filter); err != nil {
+	if err := handle.SetBPFFilter(recvBPFFilter(cfg.Port, fixedPeer)); err != nil {
 		handle.Close()
 		return nil, fmt.Errorf("failed to set BPF filter: %w", err)
 	}
