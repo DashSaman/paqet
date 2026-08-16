@@ -5,10 +5,11 @@ import (
 )
 
 type TCP struct {
-	LF_ []string `yaml:"local_flag"`
-	RF_ []string `yaml:"remote_flag"`
-	LF  []TCPF   `yaml:"-"`
-	RF  []TCPF   `yaml:"-"`
+	LF_       []string `yaml:"local_flag"`
+	RF_       []string `yaml:"remote_flag"`
+	Timestamp *bool    `yaml:"timestamp"`
+	LF        []TCPF   `yaml:"-"`
+	RF        []TCPF   `yaml:"-"`
 }
 
 type TCPF struct {
@@ -22,6 +23,14 @@ func (t *TCP) setDefaults() {
 	if len(t.RF_) == 0 {
 		t.RF_ = []string{"PA"}
 	}
+	if t.Timestamp == nil {
+		enabled := true
+		t.Timestamp = &enabled
+	}
+}
+
+func (t *TCP) TimestampsEnabled() bool {
+	return t.Timestamp == nil || *t.Timestamp
 }
 
 func (t *TCP) validate() []error {
