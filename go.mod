@@ -1,6 +1,6 @@
 module paqet
 
-go 1.25.0
+go 1.27
 
 require (
 	github.com/goccy/go-yaml v1.19.2
