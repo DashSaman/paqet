@@ -3,12 +3,15 @@ package server
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"paqet/internal/conf"
 	"paqet/internal/flog"
 	"paqet/internal/tnet"
 	"paqet/internal/tnet/kcp"
 )
+
+const acceptRetryDelay = 50 * time.Millisecond
 
 type Server struct {
 	cfg      *conf.Conf
@@ -29,7 +32,7 @@ func (s *Server) Start(ctx context.Context) error {
 	flog.Infof("server listening for packets on :%d", s.cfg.Listen.Addr.Port)
 
 	go s.listen(ctx, listener)
-	context.AfterFunc(ctx, func() { listener.Close() })
+	context.AfterFunc(ctx, func() { _ = listener.Close() })
 
 	return nil
 }
@@ -38,10 +41,12 @@ func (s *Server) listen(ctx context.Context, listener tnet.Listener) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			timer := time.NewTimer(acceptRetryDelay)
 			select {
 			case <-ctx.Done():
+				timer.Stop()
 				return
-			default:
+			case <-timer.C:
 				continue
 			}
 		}

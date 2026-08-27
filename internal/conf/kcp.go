@@ -2,6 +2,7 @@ package conf
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"time"
 
@@ -86,13 +87,6 @@ func (k *KCP) setDefaults(role string) {
 		}
 	}
 
-	// if k.Dshard == 0 {
-	// 	k.Dshard = 10
-	// }
-	// if k.Pshard == 0 {
-	// 	k.Pshard = 3
-	// }
-
 	if k.Block_ == "" {
 		k.Block_ = "aes"
 	}
@@ -136,6 +130,21 @@ func (k *KCP) validate() []error {
 		errors = append(errors, fmt.Errorf("KCP mode must be one of: %v", validModes))
 	}
 
+	if k.Mode == "manual" {
+		if k.NoDelay != 0 && k.NoDelay != 1 {
+			errors = append(errors, fmt.Errorf("KCP manual nodelay must be 0 or 1"))
+		}
+		if k.Interval < 10 || k.Interval > 5000 {
+			errors = append(errors, fmt.Errorf("KCP manual interval must be between 10-5000 ms"))
+		}
+		if k.Resend < 0 || k.Resend > 2 {
+			errors = append(errors, fmt.Errorf("KCP manual resend must be between 0-2"))
+		}
+		if k.NoCongestion != 0 && k.NoCongestion != 1 {
+			errors = append(errors, fmt.Errorf("KCP manual nocongestion must be 0 or 1"))
+		}
+	}
+
 	if k.MTU < 50 || k.MTU > 1500 {
 		errors = append(errors, fmt.Errorf("KCP MTU must be between 50-1500 bytes"))
 	}
@@ -145,6 +154,14 @@ func (k *KCP) validate() []error {
 	}
 	if k.Sndwnd < 1 || k.Sndwnd > 32768 {
 		errors = append(errors, fmt.Errorf("KCP sndwnd must be between 1-32768"))
+	}
+
+	if k.Dshard < 0 || k.Pshard < 0 {
+		errors = append(errors, fmt.Errorf("KCP FEC shard counts cannot be negative"))
+	} else if (k.Dshard == 0) != (k.Pshard == 0) {
+		errors = append(errors, fmt.Errorf("KCP FEC dshard and pshard must both be zero or both be positive"))
+	} else if k.Dshard > 0 && k.Dshard+k.Pshard > 256 {
+		errors = append(errors, fmt.Errorf("KCP FEC dshard + pshard must be <= 256"))
 	}
 
 	validBlocks := []string{"aes", "aes-128", "aes-128-gcm", "aes-192", "salsa20", "blowfish", "twofish", "cast5", "3des", "tea", "xtea", "xor", "sm4", "none", "null"}
@@ -160,11 +177,20 @@ func (k *KCP) validate() []error {
 	}
 	k.Block = b
 
-	if k.Smuxbuf < 1024 {
-		errors = append(errors, fmt.Errorf("KCP smuxbuf must be >= 1024 bytes"))
+	if k.Smuxbuf < 1024 || int64(k.Smuxbuf) > int64(math.MaxInt32) {
+		errors = append(errors, fmt.Errorf("KCP smuxbuf must be between 1024-%d bytes", math.MaxInt32))
 	}
-	if k.Streambuf < 1024 {
-		errors = append(errors, fmt.Errorf("KCP streambuf must be >= 1024 bytes"))
+	if k.Streambuf < 1024 || int64(k.Streambuf) > int64(math.MaxInt32) {
+		errors = append(errors, fmt.Errorf("KCP streambuf must be between 1024-%d bytes", math.MaxInt32))
+	}
+	if k.Streambuf > k.Smuxbuf {
+		errors = append(errors, fmt.Errorf("KCP streambuf must not exceed smuxbuf"))
+	}
+	if k.Smuxkalive_ <= 0 {
+		errors = append(errors, fmt.Errorf("KCP smuxkalive must be positive"))
+	}
+	if k.Smuxktimeout_ < k.Smuxkalive_ {
+		errors = append(errors, fmt.Errorf("KCP smuxktimeout must be greater than or equal to smuxkalive"))
 	}
 	if k.StatsInterval_ < 0 || k.StatsInterval_ > 3600 {
 		errors = append(errors, fmt.Errorf("KCP stats_interval must be between 0-3600 seconds"))
