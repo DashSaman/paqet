@@ -119,11 +119,14 @@ jobs:
         run: |
           set -euo pipefail
           archive="dist/paqet-linux-${FILENAME}-${VERSION}.tar.gz"
-          tar -tzf "$archive" | grep -qx "paqet_linux_${FILENAME}"
-          tar -tzf "$archive" | grep -qx "paqet_linux_${FILENAME}.sha256"
-
           verify_dir=$(mktemp -d)
-          trap 'rm -rf "$verify_dir"' EXIT
+          listing=$(mktemp)
+          trap 'rm -rf "$verify_dir" "$listing"' EXIT
+
+          tar -tzf "$archive" > "$listing"
+          grep -Fxq "paqet_linux_${FILENAME}" "$listing"
+          grep -Fxq "paqet_linux_${FILENAME}.sha256" "$listing"
+
           tar -xzf "$archive" -C "$verify_dir"
           (
             cd "$verify_dir"
