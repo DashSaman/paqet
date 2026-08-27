@@ -45,5 +45,11 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
+
+      - name: Govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
+
       - name: Build
         run: go build -o /tmp/paqet ./cmd
