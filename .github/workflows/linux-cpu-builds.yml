@@ -111,7 +111,7 @@ jobs:
             example/server.yaml.example
           EOF
 
-      - name: Verify archive
+      - name: Verify archive and static ELF
         shell: bash
         env:
           FILENAME: ${{ matrix.filename }}
@@ -121,6 +121,24 @@ jobs:
           archive="dist/paqet-linux-${FILENAME}-${VERSION}.tar.gz"
           tar -tzf "$archive" | grep -qx "paqet_linux_${FILENAME}"
           tar -tzf "$archive" | grep -qx "paqet_linux_${FILENAME}.sha256"
+
+          verify_dir=$(mktemp -d)
+          trap 'rm -rf "$verify_dir"' EXIT
+          tar -xzf "$archive" -C "$verify_dir"
+          (
+            cd "$verify_dir"
+            sha256sum -c "paqet_linux_${FILENAME}.sha256"
+          )
+
+          if readelf -l "$verify_dir/paqet_linux_${FILENAME}" | grep -q 'INTERP'; then
+            echo "error: binary contains a dynamic ELF interpreter" >&2
+            exit 1
+          fi
+          if readelf -d "$verify_dir/paqet_linux_${FILENAME}" 2>/dev/null | grep -q '(NEEDED)'; then
+            echo "error: binary contains shared-library dependencies" >&2
+            exit 1
+          fi
+          file "$verify_dir/paqet_linux_${FILENAME}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
