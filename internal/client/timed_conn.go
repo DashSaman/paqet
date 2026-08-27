@@ -2,7 +2,6 @@ package client
 
 import (
 	"fmt"
-	"time"
 
 	"paqet/internal/conf"
 	"paqet/internal/protocol"
@@ -11,9 +10,8 @@ import (
 )
 
 type timedConn struct {
-	cfg    *conf.Conf
-	conn   tnet.Conn
-	expire time.Time
+	cfg  *conf.Conf
+	conn tnet.Conn
 }
 
 func newTimedConn(cfg *conf.Conf) (*timedConn, error) {

@@ -18,13 +18,6 @@ import (
 	"paqet/internal/socket"
 )
 
-var (
-	iface   string
-	port    int
-	snaplen int
-	promisc bool
-)
-
 var confPath string
 
 func init() {
