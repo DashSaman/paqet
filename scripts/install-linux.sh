@@ -30,10 +30,11 @@ amd64_supports_v3() {
   flags="$(awk -F: '/^(flags|Features)[[:space:]]*:/ {print $2; exit}' /proc/cpuinfo | tr '[:upper:]' '[:lower:]')"
   [[ -n "$flags" ]] || return 1
 
-  # Go's amd64 v3 level is v2 plus AVX/AVX2/BMI/FMA/F16C/LZCNT/MOVBE/OSXSAVE.
-  # Linux names SSE3 as pni and commonly exposes LZCNT as abm.
+  # Go's amd64 v3 level is v2 plus AVX/AVX2/BMI/FMA/F16C/LZCNT/MOVBE.
+  # Linux names SSE3 as pni and commonly exposes LZCNT as abm. AVX being
+  # exposed by Linux also means the OS has enabled the required XSAVE state.
   local flag
-  for flag in cx16 lahf_lm popcnt pni ssse3 sse4_1 sse4_2 avx avx2 bmi1 bmi2 f16c fma movbe osxsave; do
+  for flag in cx16 lahf_lm popcnt pni ssse3 sse4_1 sse4_2 avx avx2 bmi1 bmi2 f16c fma movbe; do
     has_cpu_flag "$flags" "$flag" || return 1
   done
   if ! has_cpu_flag "$flags" lzcnt && ! has_cpu_flag "$flags" abm; then
