@@ -48,6 +48,7 @@ type SendHandle struct {
 	srcPort     uint16
 	time        uint32
 	timestamps  bool
+	closed      atomic.Bool
 	tsCounter   atomic.Uint32
 	tcpF        tcpF
 	ePool       sync.Pool
@@ -62,11 +63,13 @@ func NewSendHandle(cfg *conf.Network) (*SendHandle, error) {
 	// SetDirection is not fully supported on Windows Npcap, so skip it
 	if runtime.GOOS != "windows" {
 		if err := handle.SetDirection(pcap.DirectionOut); err != nil {
+			handle.Close()
 			return nil, fmt.Errorf("failed to set pcap direction out: %v", err)
 		}
 	}
 
 	if err := handle.SetBPFFilter("less 0"); err != nil {
+		handle.Close()
 		return nil, fmt.Errorf("failed to set BPF filter: %w", err)
 	}
 
@@ -183,6 +186,10 @@ func (h *SendHandle) buildTCPHeader(e *encoder, dstPort uint16, f conf.TCPF) {
 }
 
 func (h *SendHandle) Write(payload []byte, addr *net.UDPAddr) error {
+	if h.closed.Load() {
+		return net.ErrClosed
+	}
+
 	e := h.ePool.Get().(*encoder)
 	defer func() {
 		e.buf.Clear()
@@ -214,11 +221,13 @@ func (h *SendHandle) Write(payload []byte, addr *net.UDPAddr) error {
 		return err
 	}
 
-	// pcap_sendpacket is not guaranteed thread-safe.
+	// pcap_sendpacket and pcap_close must not run concurrently on the same handle.
 	h.writeMu.Lock()
-	err := h.handle.WritePacketData(e.buf.Bytes())
-	h.writeMu.Unlock()
-	return err
+	defer h.writeMu.Unlock()
+	if h.closed.Load() {
+		return net.ErrClosed
+	}
+	return h.handle.WritePacketData(e.buf.Bytes())
 }
 
 func (h *SendHandle) getClientTCPF(dstIP net.IP, dstPort uint16) conf.TCPF {
@@ -251,6 +260,11 @@ func (h *SendHandle) deleteClientTCPF(addr net.Addr) {
 }
 
 func (h *SendHandle) Close() {
+	if h.closed.Swap(true) {
+		return
+	}
+	h.writeMu.Lock()
+	defer h.writeMu.Unlock()
 	if h.handle != nil {
 		h.handle.Close()
 	}
