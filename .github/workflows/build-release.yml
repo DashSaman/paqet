@@ -15,10 +15,6 @@ jobs:
         strategy:
             matrix:
                 include:
-                    - goarch: amd64
-                      filename: amd64
-                      container: muslcc/x86_64:x86_64-linux-musl
-                      host: ""
                     - goarch: arm64
                       filename: arm64
                       container: muslcc/x86_64:aarch64-linux-musl
@@ -75,7 +71,7 @@ jobs:
                   apk update
                   apk add --no-cache git bash tar gzip wget flex bison linux-headers make jq
 
-                  # Resolve the latest Go release
+                  # Resolve the latest Go 1.27 stable release.
                   GO_DL_JSON=$(wget -qO- 'https://go.dev/dl/?mode=json&include=all') || {
                     echo "error: failed to fetch Go release list from go.dev" >&2
                     exit 1
@@ -90,6 +86,7 @@ jobs:
                   wget -q https://go.dev/dl/${GO_VERSION}.linux-amd64.tar.gz
                   tar -C /usr/local -xzf ${GO_VERSION}.linux-amd64.tar.gz
                   export PATH=$PATH:/usr/local/go/bin
+                  export GOTOOLCHAIN=local
                   git config --global --add safe.directory /src
 
                   LIBPCAP_VERSION=1.10.6
@@ -147,9 +144,7 @@ jobs:
         steps:
             - name: Setup Build Environment
               run: |
-                  # Install Npcap for libpcap support on Windows
                   choco install npcap -y
-                  # Install MinGW for CGO support
                   choco install mingw -y
 
             - name: Checkout Code
