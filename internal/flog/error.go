@@ -1,6 +1,7 @@
 package flog
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net"
@@ -13,6 +14,8 @@ func WErr(err error) error {
 	}
 
 	switch {
+	case errors.Is(err, context.Canceled):
+		return nil
 	case errors.Is(err, io.EOF):
 		return nil
 	case errors.Is(err, net.ErrClosed):
