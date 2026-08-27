@@ -1,0 +1,164 @@
+name: Publish PV1 Linux Release
+
+on:
+  push:
+    branches:
+      - "audit/alpha21-hardening-20260828"
+    paths:
+      - ".release/BUILD_v1.0.0-alpha.21-pv1"
+
+permissions:
+  contents: write
+
+jobs:
+  build-amd64:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goamd64: v1
+            filename: amd64
+          - goamd64: v3
+            filename: amd64-v3
+
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@v7
+        with:
+          ref: v1.0.0-alpha.21-pv1
+          fetch-depth: 0
+
+      - name: Build verified static Linux binary
+        shell: bash
+        env:
+          GOAMD64_LEVEL: ${{ matrix.goamd64 }}
+          FILENAME: ${{ matrix.filename }}
+          VERSION: v1.0.0-alpha.21-pv1
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          docker run --rm -i \
+            -v "$PWD:/src" -w /src \
+            -e GOAMD64_LEVEL="$GOAMD64_LEVEL" \
+            -e FILENAME="$FILENAME" \
+            -e VERSION="$VERSION" \
+            muslcc/x86_64:x86_64-linux-musl \
+            sh -eus <<'EOF'
+          apk update
+          apk add --no-cache git bash tar gzip wget flex bison linux-headers make jq
+
+          GO_DL_JSON=$(wget -qO- 'https://go.dev/dl/?mode=json&include=all')
+          GO_VERSION=$(printf '%s' "$GO_DL_JSON" \
+            | jq -r '[.[] | select(.stable) | .version | select(startswith("go1.27."))] | first // empty')
+          [ -n "$GO_VERSION" ] || { echo "error: no stable Go 1.27.x release found" >&2; exit 1; }
+          wget -q "https://go.dev/dl/${GO_VERSION}.linux-amd64.tar.gz"
+          tar -C /usr/local -xzf "${GO_VERSION}.linux-amd64.tar.gz"
+          export PATH="$PATH:/usr/local/go/bin"
+          export GOTOOLCHAIN=local
+          export GOOS=linux GOARCH=amd64 GOAMD64="$GOAMD64_LEVEL" CGO_ENABLED=1 CC=gcc
+          git config --global --add safe.directory /src
+
+          LIBPCAP_VERSION=1.10.6
+          wget -q "https://www.tcpdump.org/release/libpcap-${LIBPCAP_VERSION}.tar.gz"
+          tar -xzf "libpcap-${LIBPCAP_VERSION}.tar.gz"
+          cd "libpcap-${LIBPCAP_VERSION}"
+          ./configure --prefix=/opt/libpcap \
+            --disable-shared --disable-dbus --disable-bluetooth \
+            --disable-usb --with-pcap=linux
+          make -j"$(nproc)"
+          make install
+          cd ..
+
+          export PKG_CONFIG_PATH=/opt/libpcap/lib/pkgconfig
+          export CGO_CFLAGS="-I/opt/libpcap/include"
+          export CGO_LDFLAGS="-L/opt/libpcap/lib -lpcap"
+          export GIT_COMMIT=$(git rev-parse HEAD)
+          export GIT_TAG=v1.0.0-alpha.21-pv1
+          export BUILD_TIME=$(date -u "+%Y-%m-%d %H:%M:%S UTC")
+
+          go build -v -a -trimpath \
+            -gcflags "all=-l=4" \
+            -ldflags "-s -w -buildid= -linkmode external -extldflags '-static' \
+            -X 'paqet/cmd/version.Version=${VERSION}' \
+            -X 'paqet/cmd/version.GitCommit=${GIT_COMMIT}' \
+            -X 'paqet/cmd/version.GitTag=${GIT_TAG}' \
+            -X 'paqet/cmd/version.BuildTime=${BUILD_TIME}'" \
+            -o "paqet_linux_${FILENAME}" ./cmd/main.go
+
+          chmod +x "paqet_linux_${FILENAME}"
+          sha256sum "paqet_linux_${FILENAME}" > "paqet_linux_${FILENAME}.sha256"
+          tar -czf "dist/paqet-linux-${FILENAME}-${VERSION}.tar.gz" \
+            "paqet_linux_${FILENAME}" \
+            "paqet_linux_${FILENAME}.sha256" \
+            README.md \
+            example/client.yaml.example \
+            example/server.yaml.example
+          EOF
+
+      - name: Verify archive, checksum and static ELF
+        shell: bash
+        env:
+          FILENAME: ${{ matrix.filename }}
+          VERSION: v1.0.0-alpha.21-pv1
+        run: |
+          set -euo pipefail
+          archive="dist/paqet-linux-${FILENAME}-${VERSION}.tar.gz"
+          verify_dir=$(mktemp -d)
+          listing=$(mktemp)
+          trap 'rm -rf "$verify_dir" "$listing"' EXIT
+
+          tar -tzf "$archive" > "$listing"
+          grep -Fxq "paqet_linux_${FILENAME}" "$listing"
+          grep -Fxq "paqet_linux_${FILENAME}.sha256" "$listing"
+          tar -xzf "$archive" -C "$verify_dir"
+          (cd "$verify_dir" && sha256sum -c "paqet_linux_${FILENAME}.sha256")
+
+          if readelf -l "$verify_dir/paqet_linux_${FILENAME}" | grep -q 'INTERP'; then
+            echo "error: binary contains a dynamic ELF interpreter" >&2
+            exit 1
+          fi
+          if readelf -d "$verify_dir/paqet_linux_${FILENAME}" 2>/dev/null | grep -q '(NEEDED)'; then
+            echo "error: binary contains shared-library dependencies" >&2
+            exit 1
+          fi
+          file "$verify_dir/paqet_linux_${FILENAME}"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: pv1-linux-${{ matrix.filename }}
+          path: dist/paqet-linux-${{ matrix.filename }}-v1.0.0-alpha.21-pv1.tar.gz
+          retention-days: 30
+
+  release:
+    needs: build-amd64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download verified Linux artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: pv1-linux-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v1.0.0-alpha.21-pv1
+          name: Paqet v1.0.0-alpha.21-pv1
+          prerelease: true
+          generate_release_notes: false
+          body: |
+            Hardened fork based on upstream Paqet v1.0.0-alpha.21.
+
+            Linux x86-64 assets:
+            - amd64: GOAMD64=v1 compatibility build for old/new x86-64 CPUs
+            - amd64-v3: optimized modern CPU build
+
+            Both assets are built with Go 1.27, musl and static libpcap, include SHA-256 checksums, and pass static ELF verification before publication.
+
+            See docs/AUDIT_ALPHA21_PV1.md and docs/INSTALL_LINUX.md in the tagged source for details.
+          files: dist/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
