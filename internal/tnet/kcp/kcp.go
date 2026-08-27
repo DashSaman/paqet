@@ -56,6 +56,7 @@ func aplConf(conn *kcp.UDPSession, cfg *conf.KCP) {
 	conn.SetMtu(cfg.MTU)
 	conn.SetWriteDelay(p.wDelay)
 	conn.SetACKNoDelay(p.ackNoDelay)
+	//lint:ignore SA1019 paqet alpha.21 intentionally requires KCP stream mode; kcp-go v5.6.72 has no non-deprecated public replacement.
 	conn.SetStreamMode(true)
 	conn.SetDSCP(46)
 }

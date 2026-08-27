@@ -1,0 +1,42 @@
+name: Publish PV Release Tag
+
+on:
+  push:
+    branches:
+      - "audit/alpha21-hardening-20260828"
+    paths:
+      - ".release/PUBLISH_v1.0.0-alpha.21-pv1"
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Create release tag once
+        shell: bash
+        env:
+          TAG: v1.0.0-alpha.21-pv1
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            existing=$(git rev-list -n1 "$TAG")
+            if [[ "$existing" == "$GITHUB_SHA" ]]; then
+              echo "$TAG already points at $GITHUB_SHA"
+              exit 0
+            fi
+            echo "error: $TAG already exists at $existing; refusing to move an immutable release tag" >&2
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" "$GITHUB_SHA" -m "Paqet alpha.21 PV hardened build"
+          git push origin "refs/tags/$TAG"

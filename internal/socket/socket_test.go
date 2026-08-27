@@ -3,6 +3,8 @@ package socket
 import (
 	"net"
 	"testing"
+
+	"paqet/internal/conf"
 )
 
 func TestNextRawPortIsUniqueWithinProcessWindow(t *testing.T) {
@@ -44,5 +46,42 @@ func TestCloneUDPAddrDoesNotAliasIP(t *testing.T) {
 	original.IP[len(original.IP)-1] = 99
 	if cloned.IP.Equal(original.IP) {
 		t.Fatal("cloned IP aliases original backing array")
+	}
+}
+
+func TestPacketConnLocalAddrUsesConfiguredIPv4(t *testing.T) {
+	configured := &net.UDPAddr{IP: net.ParseIP("192.0.2.10"), Port: 8088}
+	c := &PacketConn{cfg: &conf.Network{
+		Port: 8088,
+		IPv4: conf.Addr{Addr: configured},
+	}}
+
+	got, ok := c.LocalAddr().(*net.UDPAddr)
+	if !ok {
+		t.Fatalf("LocalAddr() = %#v, want *net.UDPAddr", c.LocalAddr())
+	}
+	if !got.IP.Equal(configured.IP) || got.Port != 8088 {
+		t.Fatalf("LocalAddr() = %v, want %v:8088", got, configured.IP)
+	}
+
+	got.IP[len(got.IP)-1] = 99
+	if configured.IP.Equal(got.IP) {
+		t.Fatal("LocalAddr() aliases configured IP backing array")
+	}
+}
+
+func TestPacketConnLocalAddrFallsBackToIPv6(t *testing.T) {
+	configured := &net.UDPAddr{IP: net.ParseIP("2001:db8::10"), Port: 8088, Zone: "eth0"}
+	c := &PacketConn{cfg: &conf.Network{
+		Port: 8088,
+		IPv6: conf.Addr{Addr: configured},
+	}}
+
+	got, ok := c.LocalAddr().(*net.UDPAddr)
+	if !ok {
+		t.Fatalf("LocalAddr() = %#v, want *net.UDPAddr", c.LocalAddr())
+	}
+	if !got.IP.Equal(configured.IP) || got.Port != 8088 || got.Zone != "eth0" {
+		t.Fatalf("LocalAddr() = %v, want IPv6 %v port 8088 zone eth0", got, configured.IP)
 	}
 }

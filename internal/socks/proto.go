@@ -65,6 +65,9 @@ func readAddr(r io.Reader) (atyp byte, addr, port []byte, err error) {
 		if _, err = io.ReadFull(r, b[:]); err != nil {
 			return
 		}
+		if b[0] == 0 {
+			return atyp, nil, nil, errProtocol
+		}
 		addr = make([]byte, b[0])
 	default:
 		return atyp, nil, nil, errProtocol
@@ -115,7 +118,7 @@ func (d *datagram) bytes() []byte {
 }
 
 func decodeDatagram(p []byte) (*datagram, error) {
-	if len(p) < 4 || p[2] != 0 {
+	if len(p) < 4 || p[0] != 0 || p[1] != 0 || p[2] != 0 {
 		return nil, errProtocol
 	}
 	atyp, rest := p[3], p[4:]
@@ -132,7 +135,7 @@ func decodeDatagram(p []byte) (*datagram, error) {
 		}
 		addr, rest = rest[:net.IPv6len], rest[net.IPv6len:]
 	case atypDomain:
-		if len(rest) < 1 || len(rest) < 1+int(rest[0])+2 {
+		if len(rest) < 1 || rest[0] == 0 || len(rest) < 1+int(rest[0])+2 {
 			return nil, errProtocol
 		}
 		n := int(rest[0])

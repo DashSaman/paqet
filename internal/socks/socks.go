@@ -2,6 +2,7 @@ package socks
 
 import (
 	"context"
+	"crypto/subtle"
 	"io"
 	"net"
 	"time"
@@ -11,6 +12,8 @@ import (
 	"paqet/internal/flog"
 )
 
+const socksAcceptRetryDelay = 50 * time.Millisecond
+
 type Server struct {
 	client   *client.Client
 	username string
@@ -19,6 +22,25 @@ type Server struct {
 
 func New(client *client.Client) (*Server, error) {
 	return &Server{client: client}, nil
+}
+
+func writeAll(w io.Writer, p []byte) error {
+	for len(p) > 0 {
+		n, err := w.Write(p)
+		if n < 0 || n > len(p) {
+			return io.ErrShortWrite
+		}
+		if n > 0 {
+			p = p[n:]
+		}
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return io.ErrShortWrite
+		}
+	}
+	return nil
 }
 
 func (s *Server) Start(ctx context.Context, cfg conf.SOCKS5) error {
@@ -31,7 +53,7 @@ func (s *Server) Start(ctx context.Context, cfg conf.SOCKS5) error {
 	flog.Infof("SOCKS5 server listening on %s", cfg.Listen.String())
 
 	go s.serveTCP(ctx, listener)
-	context.AfterFunc(ctx, func() { listener.Close() })
+	context.AfterFunc(ctx, func() { _ = listener.Close() })
 
 	return nil
 }
@@ -40,10 +62,12 @@ func (s *Server) serveTCP(ctx context.Context, listener net.Listener) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			timer := time.NewTimer(socksAcceptRetryDelay)
 			select {
 			case <-ctx.Done():
+				timer.Stop()
 				return
-			default:
+			case <-timer.C:
 				continue
 			}
 		}
@@ -56,7 +80,10 @@ func (s *Server) serveTCP(ctx context.Context, listener net.Listener) {
 }
 
 func (s *Server) handleTCPConn(ctx context.Context, conn net.Conn) {
-	conn.SetDeadline(time.Now().Add(8 * time.Second))
+	if err := conn.SetDeadline(time.Now().Add(8 * time.Second)); err != nil {
+		flog.Debugf("SOCKS5 failed to set negotiation deadline for %s: %v", conn.RemoteAddr(), err)
+		return
+	}
 	if err := s.negotiate(conn); err != nil {
 		flog.Debugf("SOCKS5 negotiation with %s failed: %v", conn.RemoteAddr(), err)
 		return
@@ -66,7 +93,10 @@ func (s *Server) handleTCPConn(ctx context.Context, conn net.Conn) {
 		flog.Debugf("SOCKS5 request from %s failed: %v", conn.RemoteAddr(), err)
 		return
 	}
-	conn.SetDeadline(time.Time{})
+	if err := conn.SetDeadline(time.Time{}); err != nil {
+		flog.Debugf("SOCKS5 failed to clear negotiation deadline for %s: %v", conn.RemoteAddr(), err)
+		return
+	}
 
 	switch req.cmd {
 	case cmdConnect:
@@ -77,7 +107,7 @@ func (s *Server) handleTCPConn(ctx context.Context, conn net.Conn) {
 		s.handleAssociate(ctx, conn, req)
 	default:
 		flog.Debugf("SOCKS5 unsupported command %d from %s", req.cmd, conn.RemoteAddr())
-		s.write(conn, repCmdUnsupp)
+		_ = s.write(conn, repCmdUnsupp)
 	}
 }
 
@@ -100,7 +130,7 @@ func (s *Server) negotiate(conn net.Conn) error {
 	}
 	for _, m := range methods {
 		if m == want {
-			if _, err := conn.Write([]byte{ver, want}); err != nil {
+			if err := writeAll(conn, []byte{ver, want}); err != nil {
 				return err
 			}
 			if want == methodAuth {
@@ -109,7 +139,7 @@ func (s *Server) negotiate(conn net.Conn) error {
 			return nil
 		}
 	}
-	conn.Write([]byte{ver, methodNA})
+	_ = writeAll(conn, []byte{ver, methodNA})
 	return errProtocol
 }
 
@@ -132,11 +162,13 @@ func (s *Server) authenticate(conn net.Conn) error {
 	if _, err := io.ReadFull(conn, pass); err != nil {
 		return err
 	}
-	if string(user) == s.username && string(pass) == s.password {
-		_, err := conn.Write([]byte{verAuth, repSuccess})
-		return err
+
+	userOK := subtle.ConstantTimeCompare(user, []byte(s.username))
+	passOK := subtle.ConstantTimeCompare(pass, []byte(s.password))
+	if userOK&passOK == 1 {
+		return writeAll(conn, []byte{verAuth, repSuccess})
 	}
-	conn.Write([]byte{verAuth, repFailure})
+	_ = writeAll(conn, []byte{verAuth, repFailure})
 	return errProtocol
 }
 
@@ -145,7 +177,7 @@ func (s *Server) read(conn net.Conn) (*request, error) {
 	if _, err := io.ReadFull(conn, hdr[:]); err != nil {
 		return nil, err
 	}
-	if hdr[0] != ver {
+	if hdr[0] != ver || hdr[2] != 0 {
 		return nil, errProtocol
 	}
 	atyp, addr, port, err := readAddr(conn)
@@ -156,6 +188,5 @@ func (s *Server) read(conn net.Conn) (*request, error) {
 }
 
 func (s *Server) write(conn net.Conn, rep byte) error {
-	_, err := conn.Write([]byte{ver, rep, 0x00, atypIPv4, 0, 0, 0, 0, 0, 0})
-	return err
+	return writeAll(conn, []byte{ver, rep, 0x00, atypIPv4, 0, 0, 0, 0, 0, 0})
 }

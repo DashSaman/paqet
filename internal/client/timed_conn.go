@@ -1,7 +1,7 @@
 package client
 
 import (
-	"time"
+	"fmt"
 
 	"paqet/internal/conf"
 	"paqet/internal/protocol"
@@ -10,9 +10,8 @@ import (
 )
 
 type timedConn struct {
-	cfg    *conf.Conf
-	conn   tnet.Conn
-	expire time.Time
+	cfg  *conf.Conf
+	conn tnet.Conn
 }
 
 func newTimedConn(cfg *conf.Conf) (*timedConn, error) {
@@ -31,9 +30,9 @@ func (tc *timedConn) createConn() (tnet.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = tc.sendTCPF(conn)
-	if err != nil {
-		return nil, err
+	if err := tc.sendTCPF(conn); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("failed to initialize TCP flags: %w", err)
 	}
 	return conn, nil
 }
@@ -46,8 +45,7 @@ func (tc *timedConn) sendTCPF(conn tnet.Conn) error {
 	defer strm.Close()
 
 	p := protocol.Proto{Type: protocol.PTCPF, TCPF: tc.cfg.Network.TCP.RF}
-	err = p.Write(strm)
-	if err != nil {
+	if err := p.Write(strm); err != nil {
 		return err
 	}
 	return nil
@@ -55,6 +53,6 @@ func (tc *timedConn) sendTCPF(conn tnet.Conn) error {
 
 func (tc *timedConn) close() {
 	if tc.conn != nil {
-		tc.conn.Close()
+		_ = tc.conn.Close()
 	}
 }

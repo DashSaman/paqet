@@ -1,6 +1,8 @@
 package socket
 
 import (
+	"errors"
+	"net"
 	"testing"
 
 	"github.com/gopacket/gopacket/layers"
@@ -50,5 +52,22 @@ func TestBuildTCPHeaderCompactSYNKeepsCoreOptions(t *testing.T) {
 		if opt.OptionType == layers.TCPOptionKindTimestamps {
 			t.Fatal("compact SYN unexpectedly contains TCP timestamp")
 		}
+	}
+}
+
+func TestSendHandleWriteAfterCloseReturnsNetErrClosed(t *testing.T) {
+	h := &SendHandle{}
+	h.closed.Store(true)
+	if err := h.Write(nil, &net.UDPAddr{}); !errors.Is(err, net.ErrClosed) {
+		t.Fatalf("Write error=%v, want net.ErrClosed", err)
+	}
+}
+
+func TestSendHandleCloseIsIdempotentWithoutPCAP(t *testing.T) {
+	h := &SendHandle{}
+	h.Close()
+	h.Close()
+	if !h.closed.Load() {
+		t.Fatal("Close did not mark handle closed")
 	}
 }

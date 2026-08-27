@@ -1,0 +1,6 @@
+release: v1.0.0-alpha.21-pv1
+upstream: 4b81ce0ab56b7cc9aec7501c87c4804676cdb1b4
+verified-source: b1201f559fe1a06ff2eb5d7ea8216b25263e169b
+ci-run: 33122193035
+linux-cpu-build-run: 33122193048
+checks: gofmt,bash-n,unit,race,vet,staticcheck,govulncheck,build,amd64-v1-static,amd64-v3-static

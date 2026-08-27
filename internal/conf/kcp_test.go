@@ -74,3 +74,49 @@ func TestKCPStatsIntervalRejectsInvalidValue(t *testing.T) {
 		t.Fatal("stats_interval > 3600 must fail validation")
 	}
 }
+
+func TestKCPRejectsUnsafeSmuxSettings(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*KCP)
+	}{
+		{"negative keepalive", func(k *KCP) { k.Smuxkalive_ = -1 }},
+		{"timeout shorter than keepalive", func(k *KCP) { k.Smuxkalive_, k.Smuxktimeout_ = 10, 5 }},
+		{"stream buffer larger than session buffer", func(k *KCP) { k.Smuxbuf, k.Streambuf = 4096, 8192 }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			k := &KCP{Mode: "fast", Key: "test-key"}
+			k.setDefaults("client")
+			tt.mutate(k)
+			if errs := k.validate(); len(errs) == 0 {
+				t.Fatal("invalid smux settings unexpectedly passed validation")
+			}
+		})
+	}
+}
+
+func TestKCPRejectsInvalidFECSettings(t *testing.T) {
+	for _, shards := range [][2]int{{10, 0}, {0, 3}, {-1, 3}, {200, 100}} {
+		k := &KCP{Mode: "fast", Key: "test-key", Dshard: shards[0], Pshard: shards[1]}
+		k.setDefaults("client")
+		if errs := k.validate(); len(errs) == 0 {
+			t.Fatalf("invalid FEC dshard=%d pshard=%d passed validation", shards[0], shards[1])
+		}
+	}
+}
+
+func TestKCPManualModeValidation(t *testing.T) {
+	valid := &KCP{Mode: "manual", Key: "test-key", NoDelay: 1, Interval: 20, Resend: 2, NoCongestion: 1}
+	valid.setDefaults("client")
+	if errs := valid.validate(); len(errs) != 0 {
+		t.Fatalf("valid manual profile rejected: %v", errs)
+	}
+
+	invalid := &KCP{Mode: "manual", Key: "test-key", NoDelay: 2, Interval: 1, Resend: 3, NoCongestion: 2}
+	invalid.setDefaults("client")
+	if errs := invalid.validate(); len(errs) == 0 {
+		t.Fatal("invalid manual profile unexpectedly passed validation")
+	}
+}

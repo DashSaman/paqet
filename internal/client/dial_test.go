@@ -1,6 +1,8 @@
 package client
 
 import (
+	"context"
+	"errors"
 	"net"
 	"testing"
 	"time"
@@ -71,5 +73,27 @@ func TestPickTimedConnRepairsClosedRoundRobinCandidate(t *testing.T) {
 
 	if got := c.pickTimedConn(); got != items[0] {
 		t.Fatalf("picked %p, want closed round-robin candidate %p for repair", got, items[0])
+	}
+}
+
+func TestStreamRetryDelayIsCapped(t *testing.T) {
+	want := []time.Duration{25 * time.Millisecond, 50 * time.Millisecond, 100 * time.Millisecond, 200 * time.Millisecond, 400 * time.Millisecond, 800 * time.Millisecond, time.Second, time.Second}
+	for attempt, expected := range want {
+		if got := streamRetryDelay(uint(attempt)); got != expected {
+			t.Fatalf("attempt %d delay=%s, want %s", attempt, got, expected)
+		}
+	}
+}
+
+func TestWaitStreamRetryHonorsContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	start := time.Now()
+	err := waitStreamRetry(ctx, time.Second)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("waitStreamRetry error=%v, want context.Canceled", err)
+	}
+	if time.Since(start) > 100*time.Millisecond {
+		t.Fatal("waitStreamRetry did not return promptly after cancellation")
 	}
 }

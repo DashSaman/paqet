@@ -10,7 +10,7 @@ jobs:
     build-linux-selfhosted:
         runs-on: self-hosted
         container:
-            image: golang:1.25
+            image: golang:1.27
         strategy:
             matrix:
                 include:
@@ -60,8 +60,8 @@ jobs:
             - name: Build
               run: |
                   mkdir -p dist
-                  export CGO_ENABLED=1 
-                  export GOOS=linux 
+                  export CGO_ENABLED=1
+                  export GOOS=linux
                   export GOARCH=${{ matrix.goarch }}
                   export VERSION=${{ steps.ref_id.outputs.ref }}
                   export GIT_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")

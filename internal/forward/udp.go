@@ -5,11 +5,14 @@ import (
 	"net"
 	"net/netip"
 	"sync"
+	"time"
 
 	"paqet/internal/flog"
 	"paqet/internal/pkg/buffer"
 	"paqet/internal/tnet"
 )
+
+const udpReadRetryDelay = 50 * time.Millisecond
 
 type udpSess struct {
 	strm  tnet.Strm
@@ -26,10 +29,12 @@ func (f *Forward) serveUDP(ctx context.Context, conn *net.UDPConn) {
 	for {
 		n, cAddr, err := conn.ReadFromUDPAddrPort(buf)
 		if err != nil {
+			timer := time.NewTimer(udpReadRetryDelay)
 			select {
 			case <-ctx.Done():
+				timer.Stop()
 				return
-			default:
+			case <-timer.C:
 				continue
 			}
 		}
@@ -105,7 +110,7 @@ func (f *Forward) udpToStrm(ctx context.Context, conn *net.UDPConn, cAddr netip.
 }
 
 func (f *Forward) strmToUDP(ctx context.Context, strm tnet.Strm, conn *net.UDPConn, cAddr netip.AddrPort, sess *udpSess) {
-	stop := context.AfterFunc(ctx, func() { strm.Close() })
+	stop := context.AfterFunc(ctx, func() { _ = strm.Close() })
 	defer stop()
 
 	buf := make([]byte, buffer.UDPSize)
@@ -116,8 +121,7 @@ func (f *Forward) strmToUDP(ctx context.Context, strm tnet.Strm, conn *net.UDPCo
 			return
 		}
 		f.client.Touch(sess.key)
-		_, err = conn.WriteToUDPAddrPort(buf[:n], cAddr)
-		if err != nil {
+		if _, err = conn.WriteToUDPAddrPort(buf[:n], cAddr); err != nil {
 			flog.Errorf("UDP stream %d write failed for %s -> %s: %v", strm.SID(), cAddr, f.targetAddr, err)
 			return
 		}

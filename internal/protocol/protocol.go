@@ -97,6 +97,25 @@ func readFull(r io.Reader, n int) ([]byte, error) {
 	return b, nil
 }
 
+func writeFull(w io.Writer, b []byte) error {
+	for len(b) > 0 {
+		n, err := w.Write(b)
+		if n < 0 || n > len(b) {
+			return fmt.Errorf("protocol: invalid write count %d", n)
+		}
+		if n > 0 {
+			b = b[n:]
+		}
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return io.ErrShortWrite
+		}
+	}
+	return nil
+}
+
 func (p *Proto) Write(w io.Writer) error {
 	body := make([]byte, 0, 64)
 
@@ -141,8 +160,7 @@ func (p *Proto) Write(w io.Writer) error {
 	buf = binary.BigEndian.AppendUint16(buf, uint16(len(body)))
 	buf = append(buf, body...)
 
-	_, err := w.Write(buf)
-	return err
+	return writeFull(w, buf)
 }
 
 func (p *Proto) Read(r io.Reader) error {
@@ -170,6 +188,9 @@ func (p *Proto) Read(r io.Reader) error {
 
 	switch p.Type {
 	case PPING, PPONG:
+		if len(body) != 0 {
+			return errors.New("protocol: ping/pong body must be empty")
+		}
 		return nil
 
 	case PTCP, PUDP:

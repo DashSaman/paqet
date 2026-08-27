@@ -2,11 +2,14 @@ package server
 
 import (
 	"context"
+	"time"
 
 	"paqet/internal/flog"
 	"paqet/internal/protocol"
 	"paqet/internal/tnet"
 )
+
+const protocolHandshakeTimeout = 15 * time.Second
 
 func (s *Server) handleConn(ctx context.Context, conn tnet.Conn) {
 	for {
@@ -24,10 +27,18 @@ func (s *Server) handleConn(ctx context.Context, conn tnet.Conn) {
 }
 
 func (s *Server) handleStrm(ctx context.Context, strm tnet.Strm) {
+	if err := strm.SetReadDeadline(time.Now().Add(protocolHandshakeTimeout)); err != nil {
+		flog.Errorf("failed to set protocol handshake deadline on stream %d: %v", strm.SID(), err)
+		return
+	}
+
 	var p protocol.Proto
-	err := p.Read(strm)
-	if err != nil {
+	if err := p.Read(strm); err != nil {
 		flog.Errorf("failed to read protocol message from stream %d: %v", strm.SID(), err)
+		return
+	}
+	if err := strm.SetReadDeadline(time.Time{}); err != nil {
+		flog.Errorf("failed to clear protocol handshake deadline on stream %d: %v", strm.SID(), err)
 		return
 	}
 
