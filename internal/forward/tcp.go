@@ -3,10 +3,13 @@ package forward
 import (
 	"context"
 	"net"
+	"time"
 
 	"paqet/internal/flog"
 	"paqet/internal/pkg/buffer"
 )
+
+const tcpAcceptRetryDelay = 50 * time.Millisecond
 
 func (f *Forward) serveTCP(ctx context.Context, listener net.Listener) {
 	flog.Infof("TCP forwarder listening on %s -> %s", f.listenAddr, f.targetAddr)
@@ -14,10 +17,12 @@ func (f *Forward) serveTCP(ctx context.Context, listener net.Listener) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			timer := time.NewTimer(tcpAcceptRetryDelay)
 			select {
 			case <-ctx.Done():
+				timer.Stop()
 				return
-			default:
+			case <-timer.C:
 				continue
 			}
 		}

@@ -33,13 +33,13 @@ func (s *Server) handleAssociate(ctx context.Context, tConn net.Conn, req *reque
 	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: lAddr.IP, Port: 0})
 	if err != nil {
 		flog.Errorf("SOCKS5 failed to open UDP relay socket: %v", err)
-		s.write(tConn, repFailure)
+		_ = s.write(tConn, repFailure)
 		return
 	}
 	defer conn.Close()
 
 	bAddr := conn.LocalAddr().(*net.UDPAddr)
-	if _, err := tConn.Write(append([]byte{ver, repSuccess, 0x00}, putAddr(nil, bAddr.IP, bAddr.Port)...)); err != nil {
+	if err := writeAll(tConn, append([]byte{ver, repSuccess, 0x00}, putAddr(nil, bAddr.IP, bAddr.Port)...)); err != nil {
 		return
 	}
 
@@ -53,12 +53,12 @@ func (s *Server) handleAssociate(ctx context.Context, tConn net.Conn, req *reque
 	flog.Debugf("SOCKS5 UDP_ASSOCIATE from %s relay=%s expect=%s", tConn.RemoteAddr(), bAddr, a.cAddr.IP)
 
 	go func() {
-		io.Copy(io.Discard, tConn)
-		conn.Close()
+		_, _ = io.Copy(io.Discard, tConn)
+		_ = conn.Close()
 	}()
 	context.AfterFunc(ctx, func() {
-		conn.Close()
-		tConn.Close()
+		_ = conn.Close()
+		_ = tConn.Close()
 	})
 
 	s.serveUDP(ctx, a)
@@ -119,7 +119,7 @@ func (s *Server) udpToStrm(ctx context.Context, a *associate, d *datagram) {
 }
 
 func (s *Server) strmToUDP(ctx context.Context, strm tnet.Strm, a *associate, hdr []byte, k uint64) {
-	stop := context.AfterFunc(ctx, func() { strm.Close() })
+	stop := context.AfterFunc(ctx, func() { _ = strm.Close() })
 	defer stop()
 
 	buf := make([]byte, len(hdr)+buffer.UDPSize)
