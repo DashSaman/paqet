@@ -2,9 +2,15 @@ package client
 
 import (
 	"context"
+	"time"
 
 	"paqet/internal/flog"
 	"paqet/internal/tnet"
+)
+
+const (
+	streamRetryMinDelay = 25 * time.Millisecond
+	streamRetryMaxDelay = time.Second
 )
 
 type connState interface {
@@ -30,6 +36,28 @@ func connStreamCount(conn tnet.Conn) int {
 		return state.NumStreams()
 	}
 	return 0
+}
+
+func streamRetryDelay(attempt uint) time.Duration {
+	delay := streamRetryMinDelay
+	for i := uint(0); i < attempt && delay < streamRetryMaxDelay; i++ {
+		delay *= 2
+		if delay >= streamRetryMaxDelay {
+			return streamRetryMaxDelay
+		}
+	}
+	return delay
+}
+
+func waitStreamRetry(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // pickTimedConn keeps round-robin fairness as the tie breaker, but among live
@@ -78,6 +106,7 @@ func (c *Client) newConn() (tnet.Conn, error) {
 }
 
 func (c *Client) newStrm(ctx context.Context) (tnet.Strm, error) {
+	var attempt uint
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -85,11 +114,19 @@ func (c *Client) newStrm(ctx context.Context) (tnet.Strm, error) {
 		conn, err := c.newConn()
 		if err != nil {
 			flog.Debugf("failed to open conn, retrying: %v", err)
+			if err := waitStreamRetry(ctx, streamRetryDelay(attempt)); err != nil {
+				return nil, err
+			}
+			attempt++
 			continue
 		}
 		strm, err := conn.OpenStrm()
 		if err != nil {
 			flog.Debugf("failed to open stream, retrying: %v", err)
+			if err := waitStreamRetry(ctx, streamRetryDelay(attempt)); err != nil {
+				return nil, err
+			}
+			attempt++
 			continue
 		}
 		return strm, nil

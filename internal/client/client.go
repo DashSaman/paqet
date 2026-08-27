@@ -25,20 +25,26 @@ func New(cfg *conf.Conf) (*Client, error) {
 	return c, nil
 }
 
+func (c *Client) closeConns() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, tc := range c.iter.Items {
+		tc.close()
+		tc.conn = nil
+	}
+}
+
 func (c *Client) Start(ctx context.Context) error {
 	for i := range c.cfg.Transport.Conn {
 		tc, err := newTimedConn(c.cfg)
 		if err != nil {
+			c.closeConns()
 			flog.Errorf("failed to create connection %d: %v", i+1, err)
 			return err
 		}
 		c.iter.Items = append(c.iter.Items, tc)
 	}
-	context.AfterFunc(ctx, func() {
-		for _, tc := range c.iter.Items {
-			tc.close()
-		}
-	})
+	context.AfterFunc(ctx, c.closeConns)
 
 	go c.udpPool.ticker(ctx)
 
